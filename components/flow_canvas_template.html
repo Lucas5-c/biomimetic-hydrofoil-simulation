@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #0E1117;
+      overflow: hidden;
+      font-family: "Microsoft YaHei", "Segoe UI", sans-serif;
+    }
+    #wrap {
+      position: relative;
+      width: 100%;
+      height: 650px;
+      border: 1px solid #26384B;
+      border-radius: 8px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 32% 18%, rgba(0, 183, 255, 0.16), transparent 28%),
+        radial-gradient(circle at 68% 60%, rgba(255, 209, 102, 0.10), transparent 30%),
+        linear-gradient(180deg, #111A25 0%, #080D13 100%);
+    }
+    canvas { width: 100%; height: 100%; display: block; }
+    #hud {
+      position: absolute;
+      left: 14px;
+      top: 12px;
+      color: #D6DEE8;
+      font-size: 12px;
+      line-height: 1.55;
+      background: rgba(14, 17, 23, 0.70);
+      border: 1px solid rgba(38, 56, 75, 0.85);
+      border-radius: 6px;
+      padding: 8px 10px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="flow"></canvas>
+  <div id="hud"></div>
+</div>
+<script type="application/json" id="flow-data">__FLOW_PAYLOAD__</script>
+<script>
+const payload = JSON.parse(document.getElementById("flow-data").textContent);
+const canvas = document.getElementById("flow");
+const ctx = canvas.getContext("2d");
+const hud = document.getElementById("hud");
+let W = 1;
+let H = 1;
+let particles = [];
+let tick = 0;
+
+const speedGain = Math.max(0.35, payload.velocity / 8.0);
+const alphaGain = Math.max(0, payload.alphaDeg) / 12.0;
+const trailLimit = Math.max(6, Math.min(58, payload.trailLength + Math.round(speedGain * 4)));
+const wakeGain = Math.max(0, payload.wakeStrength || 0);
+const vortexGain = Math.max(0, payload.vortexStrength || 0);
+const attachGain = Math.max(0.1, payload.attachmentStrength || 0.8);
+const emitGain = Math.max(0.2, payload.emissionStrength || 0.7);
+
+function resize() {
+  const rect = canvas.getBoundingClientRect();
+  W = Math.max(760, Math.floor(rect.width * window.devicePixelRatio));
+  H = Math.max(460, Math.floor(rect.height * window.devicePixelRatio));
+  canvas.width = W;
+  canvas.height = H;
+}
+window.addEventListener("resize", resize);
+resize();
+
+function worldToPx(x, y) {
+  return {
+    x: (x + 0.18) / 1.50 * W,
+    y: (0.40 - y) / 0.80 * H,
+  };
+}
+
+function nacaThickness(x) {
+  const xc = Math.min(1, Math.max(0, x));
+  return 5 * 0.12 * (
+    0.2969 * Math.sqrt(xc) -
+    0.1260 * xc -
+    0.3516 * xc * xc +
+    0.2843 * Math.pow(xc, 3) -
+    0.1015 * Math.pow(xc, 4)
+  );
+}
+
+function inverseRotate(x, y) {
+  const a = -payload.alphaDeg * Math.PI / 180;
+  const xp = x - 0.25;
+  const yp = y;
+  return {
+    x: xp * Math.cos(a) - yp * Math.sin(a) + 0.25,
+    y: xp * Math.sin(a) + yp * Math.cos(a),
+  };
+}
+
+function rotate(x, y) {
+  const a = payload.alphaDeg * Math.PI / 180;
+  const xp = x - 0.25;
+  const yp = y;
+  return {
+    x: xp * Math.cos(a) - yp * Math.sin(a) + 0.25,
+    y: xp * Math.sin(a) + yp * Math.cos(a),
+  };
+}
+
+function zoneStrength(zone) {
+  const z = payload.zones[zone];
+  return z && z.enabled ? z.strength : 0;
+}
+
+function zoneAngle(zone) {
+  const z = payload.zones[zone];
+  return z && z.enabled ? z.angle : 0;
+}
+
+function velocityAt(x, y) {
+  const b = inverseRotate(x, y);
+  const xb = b.x;
+  const yb = b.y;
+  const thickness = nacaThickness(xb);
+  const inChord = xb >= 0 && xb <= 1;
+  const surfaceDist = Math.abs(Math.abs(yb) - thickness);
+  const near = inChord ? Math.exp(-Math.pow(surfaceDist / (0.055 + 0.012 * attachGain), 2)) : 0;
+  const upper = yb > 0 ? Math.exp(-Math.pow((yb - thickness - 0.022) / 0.072, 2)) : 0;
+  const lower = yb < 0 ? Math.exp(-Math.pow((yb + thickness - 0.022) / 0.080, 2)) : 0;
+  const leading = Math.exp(-Math.pow((xb - 0.20) / 0.23, 2));
+  const mid = Math.exp(-Math.pow((xb - 0.50) / 0.32, 2));
+  const aft = Math.exp(-Math.pow((xb - 0.78) / 0.26, 2));
+
+  let vx = 0.0065 + payload.velocity * 0.00185;
+  let vy = payload.velocity * 0.00018 * payload.alphaDeg;
+  vx += payload.velocity * 0.00145 * (0.18 + 0.45 * alphaGain) * leading * upper;
+  vx += payload.velocity * 0.00110 * (0.10 + 0.28 * alphaGain) * mid * upper;
+  vx -= payload.velocity * 0.00070 * (0.04 + 0.10 * alphaGain) * mid * lower;
+  vy += payload.velocity * 0.00145 * near * attachGain * Math.sign(yb || 0.01);
+
+  const A = zoneStrength("A");
+  if (A && xb >= 0.17 && xb <= 0.36) {
+    const ripple = Math.sin(tick * 0.22 + xb * 80);
+    vx += 0.0060 * A * ripple * upper;
+    vy += 0.0130 * A * Math.cos(tick * 0.18 + xb * 62) * upper;
+  }
+
+  const B = zoneStrength("B");
+  if (B && xb >= 0.34 && xb <= 0.67) {
+    const ramp = Math.sin((xb - 0.34) / 0.33 * Math.PI);
+    vx -= 0.0115 * B * upper;
+    vy += 0.0215 * B * ramp * upper;
+    const localSwirl = Math.sin(tick * 0.16 + xb * 34 + yb * 28);
+    vy += 0.0100 * B * localSwirl * Math.exp(-Math.pow((yb - thickness - 0.055) / 0.12, 2));
+  }
+
+  const C = zoneStrength("C");
+  if (xb >= 0.64) {
+    const wakeEnv = Math.exp(-Math.max(0, xb - 0.72) / (0.42 + 0.30 * speedGain));
+    const cOn = Math.max(0.0, C);
+    vx += 0.0120 * cOn * wakeEnv;
+    vy *= 1 - 0.48 * cOn;
+    vy += 0.0060 * (1 - cOn) * wakeGain * Math.sign(yb || 0.01) * Math.exp(-Math.abs(yb) / 0.20);
+  }
+
+  if (payload.showVortex && xb > 0.74) {
+    const C = zoneStrength("C");
+    const B = zoneStrength("B");
+    const wake = Math.exp(-Math.max(0, xb - 0.82) / (0.46 + 0.20 * speedGain));
+    const damp = Math.max(0.15, 1 - 0.55 * C);
+    const core = (0.028 + 0.045 * alphaGain) * Math.sin((xb - 0.80) * 19 + tick * 0.075);
+    const dy = yb - core - 0.015 * alphaGain;
+    const env = wake * Math.exp(-Math.pow(dy / (0.10 + 0.03 * alphaGain), 2));
+    vx += (0.008 + 0.005 * speedGain) * env * Math.cos(tick * 0.08 + xb * 19) * vortexGain * damp;
+    vy += (0.018 + 0.010 * B) * env * Math.sin(tick * 0.08 + xb * 19) * vortexGain * damp;
+    vy -= 0.008 * alphaGain * wake * wakeGain;
+  }
+
+  if (inChord && Math.abs(yb) < thickness + 0.008) {
+    vy += 0.026 * Math.sign(yb || 0.01);
+    vx *= 0.62;
+  }
+
+  const simSpeed = payload.animationSpeed * (0.72 + 0.38 * speedGain);
+  return {vx: vx * simSpeed, vy: vy * simSpeed, speed: Math.sqrt(vx * vx + vy * vy)};
+}
+
+function initParticles() {
+  particles = [];
+  const count = Math.max(0, payload.particleCount);
+  for (let i = 0; i < count; i++) {
+    const biased = Math.random();
+    const nearFoil = biased < 0.62;
+    particles.push({
+      x: -0.17 + Math.random() * 1.48,
+      y: nearFoil ? (-0.16 + Math.random() * 0.32) : (-0.35 + Math.random() * 0.70),
+      life: Math.random() * 2.5,
+      trail: [],
+      phase: Math.random() * Math.PI * 2,
+    });
+  }
+}
+
+function resetParticle(p) {
+  p.x = -0.18 - Math.random() * (0.05 + 0.05 * emitGain);
+  const nearFoil = Math.random() < 0.70;
+  p.y = nearFoil ? (-0.18 + Math.random() * 0.36) : (-0.35 + Math.random() * 0.70);
+  p.life = 0;
+  p.trail = [];
+}
+
+function particleColor(speed, alpha) {
+  const t = Math.max(0, Math.min(1, speed / (0.028 + 0.010 * speedGain)));
+  if (t < 0.45) {
+    return `rgba(${20 + 30 * t}, ${92 + 150 * t}, ${180 + 60 * t}, ${alpha})`;
+  }
+  if (t < 0.78) {
+    const k = (t - 0.45) / 0.33;
+    return `rgba(${40 + 140 * k}, ${210 + 35 * k}, ${245}, ${alpha})`;
+  }
+  const k = (t - 0.78) / 0.22;
+  return `rgba(${210 + 45 * k}, ${245 - 25 * k}, ${255 - 120 * k}, ${alpha})`;
+}
+
+function drawPressureBackground() {
+  if (!payload.showPressure) return;
+  const base = Math.min(0.42, 0.10 + 0.018 * payload.velocity);
+  const grad = ctx.createLinearGradient(0, 0, W, 0);
+  grad.addColorStop(0.00, `rgba(0, 80, 180, ${0.08 + base * 0.20})`);
+  grad.addColorStop(0.27, `rgba(0, 183, 255, ${0.14 + base * 0.42})`);
+  grad.addColorStop(0.52, `rgba(255, 209, 102, ${0.10 + base * 0.28})`);
+  grad.addColorStop(0.82, `rgba(87, 204, 153, ${0.09 + base * 0.18})`);
+  grad.addColorStop(1.00, "rgba(20, 28, 38, 0.10)");
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  const low = worldToPx(0.42 + 0.10 * zoneStrength("B"), 0.075 + 0.08 * alphaGain);
+  const radial = ctx.createRadialGradient(low.x, low.y, 8, low.x, low.y, W * (0.22 + 0.06 * speedGain));
+  radial.addColorStop(0, `rgba(255, 77, 202, ${0.15 + 0.26 * zoneStrength("B") + 0.12 * alphaGain})`);
+  radial.addColorStop(1, "rgba(255, 77, 202, 0)");
+  ctx.fillStyle = radial;
+  ctx.fillRect(0, 0, W, H);
+
+  const high = worldToPx(0.10, -0.08);
+  const highRadial = ctx.createRadialGradient(high.x, high.y, 4, high.x, high.y, W * 0.16);
+  highRadial.addColorStop(0, "rgba(255, 209, 102, 0.18)");
+  highRadial.addColorStop(1, "rgba(255, 209, 102, 0)");
+  ctx.fillStyle = highRadial;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawZones() {
+  const zones = [
+    ["A", 0.18, 0.35, "rgba(0,183,255,0.13)"],
+    ["B", 0.35, 0.65, "rgba(255,209,102,0.12)"],
+    ["C", 0.65, 0.82, "rgba(87,204,153,0.12)"],
+  ];
+  ctx.textAlign = "center";
+  ctx.font = `${Math.max(12, W * 0.014)}px Microsoft YaHei`;
+  for (const [label, x0, x1, color] of zones) {
+    const p0 = worldToPx(x0, 0.36);
+    const p1 = worldToPx(x1, -0.36);
+    ctx.fillStyle = color;
+    ctx.fillRect(p0.x, p0.y, p1.x - p0.x, p1.y - p0.y);
+    if (payload.showZoneLabels !== false) {
+      const t = worldToPx((x0 + x1) / 2, 0.315);
+      ctx.fillStyle = "#F5F7FA";
+      ctx.fillText(label, t.x, t.y);
+    }
+  }
+}
+
+function drawFoil() {
+  ctx.beginPath();
+  for (let i = 0; i < payload.foilOutline.length; i++) {
+    const p = worldToPx(payload.foilOutline[i].x, payload.foilOutline[i].y);
+    if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+  }
+  ctx.closePath();
+  ctx.fillStyle = "rgba(245,247,250,0.97)";
+  ctx.fill();
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = "#071018";
+  ctx.stroke();
+}
+
+function drawAZoneRipples() {
+  const A = zoneStrength("A");
+  if (!A) return;
+  ctx.lineWidth = 1.3;
+  for (let i = 0; i < 7; i++) {
+    const x = 0.18 + i * 0.027;
+    const root = rotate(x, nacaThickness(x) + 0.028 + 0.010 * Math.sin(tick * 0.16 + i));
+    const p = worldToPx(root.x, root.y);
+    ctx.strokeStyle = `rgba(0,183,255,${0.15 + 0.42 * A})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, (10 + 8 * A + i * 0.8) * window.devicePixelRatio, tick * 0.06 + i, tick * 0.06 + i + Math.PI * 0.85);
+    ctx.stroke();
+  }
+}
+
+function drawVanes() {
+  if (!payload.showVanes) return;
+  const specs = [
+    ["A", [0.205, 0.245, 0.285, 0.325], 0.040, "#00B7FF", "wedge"],
+    ["B", [0.405, 0.485, 0.565, 0.635], 0.078, "#FFD166", "flap"],
+    ["C", [0.675, 0.730, 0.785], 0.064, "#57CC99", "swept"],
+  ];
+  for (const [zone, xs, length, color, kind] of specs) {
+    if (!payload.zones[zone].enabled) continue;
+    for (const x of xs) {
+      const angle = zoneAngle(zone);
+      const root = rotate(x, nacaThickness(x) + 0.010);
+      const theta = (payload.alphaDeg + angle) * Math.PI / 180;
+      const tip = {x: root.x + length * Math.cos(theta), y: root.y + length * Math.sin(theta)};
+      const p0 = worldToPx(root.x, root.y);
+      const p1 = worldToPx(tip.x, tip.y);
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = kind === "B" ? 4.4 : 3.0;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+      if (kind === "wedge") {
+        ctx.beginPath();
+        ctx.moveTo(p0.x, p0.y);
+        ctx.lineTo(p1.x, p1.y);
+        ctx.lineTo(p0.x + 8, p0.y + 2);
+        ctx.closePath();
+        ctx.globalAlpha = 0.65;
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+      }
+      if (kind === "swept") {
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p1.x - 10 * window.devicePixelRatio, p1.y + 5 * window.devicePixelRatio);
+        ctx.stroke();
+      }
+    }
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    const v = velocityAt(p.x, p.y);
+    p.trail.push({x: p.x, y: p.y, s: v.speed});
+    if (p.trail.length > trailLimit) p.trail.shift();
+    if (payload.playing) {
+      p.x += v.vx;
+      p.y += v.vy;
+      p.life += 0.01 * (0.75 + speedGain);
+    }
+    if (p.x > 1.35 || p.y > 0.43 || p.y < -0.43 || p.life > 4.0) resetParticle(p);
+    for (let i = 1; i < p.trail.length; i++) {
+      const a = i / p.trail.length;
+      const p0 = worldToPx(p.trail[i - 1].x, p.trail[i - 1].y);
+      const p1 = worldToPx(p.trail[i].x, p.trail[i].y);
+      ctx.strokeStyle = particleColor(p.trail[i].s, 0.04 + 0.50 * a);
+      ctx.lineWidth = (1.0 + 2.1 * a + 0.45 * speedGain) * window.devicePixelRatio;
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+    }
+    const pp = worldToPx(p.x, p.y);
+    ctx.fillStyle = particleColor(v.speed, 0.96);
+    ctx.beginPath();
+    ctx.arc(pp.x, pp.y, Math.max(1.6, W * 0.0020), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawVortexMarks() {
+  if (!payload.showVortex) return;
+  const C = zoneStrength("C");
+  const B = zoneStrength("B");
+  const damp = Math.max(0.18, 1 - 0.55 * C);
+  const intensity = (0.55 + 0.28 * speedGain + 0.25 * alphaGain + 0.30 * B) * vortexGain * damp;
+  const spread = 0.030 + 0.065 * (1 - C) + 0.030 * alphaGain;
+  const cores = [
+    [0.90, 0.045 + spread, 32],
+    [1.05, -0.030 - spread * 0.55, -42],
+    [1.22, 0.018 + spread * 0.35, 50],
+  ];
+  ctx.lineWidth = (1.1 + 1.8 * intensity) * window.devicePixelRatio;
+  for (const [x, y, phase] of cores) {
+    const c = worldToPx(x, y);
+    const r = Math.max(18, W * (0.030 + 0.025 * intensity));
+    ctx.strokeStyle = `rgba(255,255,255,${0.08 + 0.32 * intensity})`;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, r, tick * 0.035 + phase, tick * 0.035 + phase + Math.PI * 1.48);
+    ctx.stroke();
+  }
+}
+
+function drawSeparationCloud() {
+  const B = zoneStrength("B");
+  if (alphaGain < 0.35 && B < 0.25) return;
+  const strength = Math.min(1, 0.45 * alphaGain + 0.65 * B);
+  for (let i = 0; i < 18; i++) {
+    const x = 0.45 + Math.random() * 0.36;
+    const y = 0.08 + Math.random() * (0.10 + 0.04 * alphaGain);
+    const p = worldToPx(x, y);
+    const r = (4 + Math.random() * 16) * window.devicePixelRatio;
+    ctx.fillStyle = `rgba(255,209,102,${0.018 + 0.060 * strength})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function frame() {
+  ctx.fillStyle = `rgba(14,17,23,${0.18 + 0.12 / Math.max(0.7, speedGain)})`;
+  ctx.fillRect(0, 0, W, H);
+  drawPressureBackground();
+  drawZones();
+  drawAZoneRipples();
+  drawVortexMarks();
+  drawSeparationCloud();
+  drawParticles();
+  drawFoil();
+  drawVanes();
+  hud.innerHTML =
+    `U=${payload.velocity.toFixed(1)} m/s&nbsp;&nbsp; alpha=${payload.alphaDeg.toFixed(1)}°<br>` +
+    `particles=${payload.particleCount}&nbsp;&nbsp; trail=${trailLimit}&nbsp;&nbsp; ${payload.playing ? "播放" : "暂停"}<br>` +
+    `A ${payload.zones.A.angle.toFixed(1)}° / B ${payload.zones.B.angle.toFixed(1)}° / C ${payload.zones.C.angle.toFixed(1)}°`;
+  if (payload.playing) tick += 1;
+  requestAnimationFrame(frame);
+}
+
+initParticles();
+frame();
+</script>
+</body>
+</html>
