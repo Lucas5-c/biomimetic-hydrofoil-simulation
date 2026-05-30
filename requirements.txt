@@ -1,7 +1,5 @@
 streamlit
 numpy
 matplotlib
-pandas
 pillow
 plotly
-imageio

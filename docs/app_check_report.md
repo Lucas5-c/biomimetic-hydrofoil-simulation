@@ -60,10 +60,8 @@
 - OK `streamlit` import is available
 - OK `numpy` import is available
 - OK `matplotlib` import is available
-- OK `pandas` import is available
 - OK `pillow` import is available
 - OK `plotly` import is available
-- WARNING `imageio` import is not installed in current local environment; cloud installs from requirements.txt
 
 ## Core Simulation And Export
 - OK generated `assets/outputs/test_deploy_pressure_field.png`

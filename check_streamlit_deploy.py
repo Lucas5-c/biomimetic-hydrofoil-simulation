@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import py_compile
+import re
 import sys
 import tempfile
 from datetime import datetime
@@ -48,7 +49,7 @@ REQUIRED_DIRS = [
     APP_ROOT / "assets" / "outputs",
     APP_ROOT / "docs",
 ]
-REQUIRED_PACKAGES = {"streamlit", "numpy", "matplotlib", "pandas", "pillow", "plotly", "imageio"}
+REQUIRED_PACKAGES = {"streamlit", "numpy", "matplotlib", "pillow", "plotly"}
 DISALLOWED_REQUIREMENTS = [
     "cad" + "query",
     "o" + "cp",
@@ -59,10 +60,12 @@ DISALLOWED_REQUIREMENTS = [
     "ju" + "pyter",
     "note" + "book",
 ]
-FORBIDDEN_TEXT = [
-    "D:" + "\\Biomimetic_Hydrofoil_Project",
-    "C:" + "\\Users\\13546\\anaconda3",
-    "hydrofoil" + "_cq",
+FORBIDDEN_TEXT_PATTERNS = [
+    re.compile(r"\b[A-Za-z]:[\\/][^\s\"'<>`]+"),
+    re.compile("/" + "Users" + r"/[^/\s\"'<>`]+/"),
+    re.compile("/" + "home" + r"/[^/\s\"'<>`]+/"),
+    re.compile(r"\\" + "Users" + r"\\[^\\\s\"'<>`]+\\"),
+    re.compile("hydrofoil" + "_cq", re.IGNORECASE),
 ]
 GEOMETRY_SUFFIXES = {"." + "step", "." + "stp", "." + "stl"}
 BATCH_SUFFIX = "." + "bat"
@@ -143,9 +146,10 @@ def check_forbidden_content(report: list[str]) -> bool:
         if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
             continue
         text = path.read_text(encoding="utf-8", errors="ignore")
-        for token in FORBIDDEN_TEXT:
-            if token in text:
+        for pattern in FORBIDDEN_TEXT_PATTERNS:
+            if pattern.search(text):
                 forbidden_hits.append(f"`{rel(path)}` contains forbidden local path token")
+                break
     ok = add_result(report, not forbidden_hits, "no forbidden local path tokens in text files") and ok
     report.extend(f"  {hit}" for hit in forbidden_hits)
     report.append("")
@@ -175,10 +179,8 @@ def check_installed_dependencies(report: list[str]) -> bool:
         "streamlit": "streamlit",
         "numpy": "numpy",
         "matplotlib": "matplotlib",
-        "pandas": "pandas",
         "pillow": "PIL",
         "plotly": "plotly",
-        "imageio": "imageio",
     }
     for package, import_name in import_names.items():
         installed = importlib.util.find_spec(import_name) is not None
