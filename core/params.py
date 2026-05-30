@@ -50,11 +50,12 @@ VISUAL_DEFAULTS: dict[str, Any] = {
     "emission_strength": 0.80,
     "attachment_strength": 0.78,
     "wake_strength": 0.80,
-    "vortex_strength": 0.50,
+    "vortex_strength": 0.45,
     "separation_strength": 0.4,
-    "cavitation_strength": 0.3,
+    "cavitation_strength": 0.25,
     "vane_deploy_angle": 24.0,
     "quality_mode": "流畅",
+    "visual_style": "natural_water",
     "pressure_background": True,
     "show_pressure": True,
     "show_particles": True,
@@ -66,8 +67,13 @@ VISUAL_DEFAULTS: dict[str, Any] = {
     "playing": True,
     "wake_highlight_strength": 1.0,
     "speed_colormap_strength": 1.0,
-    "vortex_animation_strength": 0.8,
+    "vortex_animation_strength": 0.45,
     "blade_animation_strength": 1.0,
+    "bubble_density": 0.4,
+    "bubble_size_scale": 0.8,
+    "vortex_visibility": 0.55,
+    "vortex_core_size": 0.85,
+    "wake_vortex_count": 2,
     "show_separation_zone": False,
     "show_blade_animation": True,
     "show_wake_highlight": True,
@@ -91,11 +97,12 @@ DEFAULT_STATE: dict[str, Any] = {
     "emission_strength": 0.80,
     "attachment_strength": 0.78,
     "wake_strength": 0.80,
-    "vortex_strength": 0.50,
+    "vortex_strength": 0.45,
     "separation_strength": 0.4,
-    "cavitation_strength": 0.3,
+    "cavitation_strength": 0.25,
     "vane_deploy_angle": 24.0,
     "quality_mode": "流畅",
+    "visual_style": "natural_water",
     "pressure_background": True,
     "show_pressure": True,
     "show_particles": True,
@@ -104,8 +111,13 @@ DEFAULT_STATE: dict[str, Any] = {
     "show_separation": False,
     "wake_highlight_strength": 1.0,
     "speed_colormap_strength": 1.0,
-    "vortex_animation_strength": 0.8,
+    "vortex_animation_strength": 0.45,
     "blade_animation_strength": 1.0,
+    "bubble_density": 0.4,
+    "bubble_size_scale": 0.8,
+    "vortex_visibility": 0.55,
+    "vortex_core_size": 0.85,
+    "wake_vortex_count": 2,
     "show_separation_zone": False,
     "show_blade_animation": True,
     "show_wake_highlight": True,
@@ -212,6 +224,14 @@ QUALITY_MODE_LIMITS: dict[str, dict[str, Any]] = {
         "target_fps": 60,
         "bubble_cap": 0,
         "vortex_marks": 2,
+        "cavitation_strength": 0.25,
+        "bubble_density": 0.4,
+        "bubble_size_scale": 0.8,
+        "vortex_strength": 0.45,
+        "vortex_animation_strength": 0.45,
+        "vortex_visibility": 0.55,
+        "vortex_core_size": 0.85,
+        "wake_vortex_count": 2,
         "shadow_level": 0,
         "dpr": 1.0,
     },
@@ -221,6 +241,14 @@ QUALITY_MODE_LIMITS: dict[str, dict[str, Any]] = {
         "target_fps": 50,
         "bubble_cap": 40,
         "vortex_marks": 4,
+        "cavitation_strength": 0.45,
+        "bubble_density": 0.7,
+        "bubble_size_scale": 1.0,
+        "vortex_strength": 0.75,
+        "vortex_animation_strength": 0.7,
+        "vortex_visibility": 0.75,
+        "vortex_core_size": 1.0,
+        "wake_vortex_count": 4,
         "shadow_level": 1,
         "dpr": 1.25,
     },
@@ -228,8 +256,16 @@ QUALITY_MODE_LIMITS: dict[str, dict[str, Any]] = {
         "max_particles": 2500,
         "max_trail": 12,
         "target_fps": 45,
-        "bubble_cap": 120,
+        "bubble_cap": 100,
         "vortex_marks": 6,
+        "cavitation_strength": 0.7,
+        "bubble_density": 1.0,
+        "bubble_size_scale": 1.2,
+        "vortex_strength": 1.0,
+        "vortex_animation_strength": 1.0,
+        "vortex_visibility": 0.9,
+        "vortex_core_size": 1.2,
+        "wake_vortex_count": 6,
         "shadow_level": 2,
         "dpr": 1.5,
     },
@@ -238,13 +274,20 @@ QUALITY_MODE_LIMITS: dict[str, dict[str, Any]] = {
 VISUAL_PRESETS: dict[str, dict[str, Any]] = {
     "流畅演示": {
         "quality_mode": "流畅",
+        "visual_style": "natural_water",
         "particle_count": 600,
         "trail_length": 3,
         "emission_strength": 0.8,
         "wake_strength": 0.8,
-        "vortex_strength": 0.5,
+        "vortex_strength": 0.45,
         "separation_strength": 0.4,
-        "cavitation_strength": 0.3,
+        "cavitation_strength": 0.25,
+        "bubble_density": 0.4,
+        "bubble_size_scale": 0.8,
+        "vortex_animation_strength": 0.45,
+        "vortex_visibility": 0.55,
+        "vortex_core_size": 0.85,
+        "wake_vortex_count": 2,
         "show_cavitation_bubbles": False,
         "show_separation": False,
         "show_separation_zone": False,
@@ -256,13 +299,20 @@ VISUAL_PRESETS: dict[str, dict[str, Any]] = {
     },
     "平衡展示": {
         "quality_mode": "平衡",
+        "visual_style": "natural_water",
         "particle_count": 1000,
         "trail_length": 5,
         "emission_strength": 0.9,
         "wake_strength": 0.9,
-        "vortex_strength": 0.7,
+        "vortex_strength": 0.75,
         "separation_strength": 0.55,
         "cavitation_strength": 0.45,
+        "bubble_density": 0.7,
+        "bubble_size_scale": 1.0,
+        "vortex_animation_strength": 0.7,
+        "vortex_visibility": 0.75,
+        "vortex_core_size": 1.0,
+        "wake_vortex_count": 4,
         "show_cavitation_bubbles": True,
         "show_separation": True,
         "show_separation_zone": True,
@@ -274,13 +324,20 @@ VISUAL_PRESETS: dict[str, dict[str, Any]] = {
     },
     "炸裂截图": {
         "quality_mode": "炸裂",
+        "visual_style": "natural_water",
         "particle_count": 1800,
         "trail_length": 10,
         "emission_strength": 1.15,
         "wake_strength": 1.25,
         "vortex_strength": 1.0,
         "separation_strength": 0.9,
-        "cavitation_strength": 0.8,
+        "cavitation_strength": 0.7,
+        "bubble_density": 1.0,
+        "bubble_size_scale": 1.2,
+        "vortex_animation_strength": 1.0,
+        "vortex_visibility": 0.9,
+        "vortex_core_size": 1.2,
+        "wake_vortex_count": 6,
         "show_cavitation_bubbles": True,
         "show_separation": True,
         "show_separation_zone": True,
@@ -292,6 +349,7 @@ VISUAL_PRESETS: dict[str, dict[str, Any]] = {
     },
     "低配电脑模式": {
         "quality_mode": "流畅",
+        "visual_style": "natural_water",
         "particle_count": 400,
         "trail_length": 2,
         "emission_strength": 0.65,
@@ -299,6 +357,12 @@ VISUAL_PRESETS: dict[str, dict[str, Any]] = {
         "vortex_strength": 0.3,
         "separation_strength": 0.2,
         "cavitation_strength": 0.15,
+        "bubble_density": 0.2,
+        "bubble_size_scale": 0.7,
+        "vortex_animation_strength": 0.3,
+        "vortex_visibility": 0.35,
+        "vortex_core_size": 0.75,
+        "wake_vortex_count": 1,
         "show_cavitation_bubbles": False,
         "show_separation": False,
         "show_separation_zone": False,
@@ -371,6 +435,12 @@ def apply_quality_limits(visual: dict[str, Any], fast_preview: bool = False) -> 
     merged["vortex_mark_count"] = limits["vortex_marks"]
     merged["shadow_level"] = limits["shadow_level"]
     merged["max_dpr"] = limits["dpr"]
+    merged["visual_style"] = str(merged.get("visual_style", "natural_water") or "natural_water")
+    merged["bubble_density"] = float(merged.get("bubble_density", limits["bubble_density"]))
+    merged["bubble_size_scale"] = float(merged.get("bubble_size_scale", limits["bubble_size_scale"]))
+    merged["vortex_visibility"] = float(merged.get("vortex_visibility", limits["vortex_visibility"]))
+    merged["vortex_core_size"] = float(merged.get("vortex_core_size", limits["vortex_core_size"]))
+    merged["wake_vortex_count"] = int(merged.get("wake_vortex_count", limits["wake_vortex_count"]))
 
     merged["particle_count"] = min(int(merged.get("particle_count", 600)), limits["max_particles"])
     merged["trail_length"] = min(int(merged.get("trail_length", 3)), limits["max_trail"])
@@ -382,9 +452,29 @@ def apply_quality_limits(visual: dict[str, Any], fast_preview: bool = False) -> 
         merged["cavitation_strength"] = min(float(merged.get("cavitation_strength", 0.3)), 0.35)
         merged["separation_strength"] = min(float(merged.get("separation_strength", 0.4)), 0.45)
         merged["vortex_strength"] = min(float(merged.get("vortex_strength", 0.5)), 0.55)
+        merged["bubble_density"] = min(float(merged["bubble_density"]), 0.45)
+        merged["bubble_size_scale"] = min(float(merged["bubble_size_scale"]), 0.85)
+        merged["vortex_visibility"] = min(float(merged["vortex_visibility"]), 0.60)
+        merged["wake_vortex_count"] = min(int(merged["wake_vortex_count"]), 2)
     elif mode == "平衡":
-        merged["cavitation_strength"] = min(float(merged.get("cavitation_strength", 0.45)), 0.65)
+        merged["show_cavitation_bubbles"] = bool(merged.get("show_cavitation_bubbles", True))
+        merged["cavitation_strength"] = min(max(float(merged.get("cavitation_strength", 0.45)), 0.35), 0.65)
         merged["separation_strength"] = min(float(merged.get("separation_strength", 0.55)), 0.75)
+        merged["bubble_density"] = min(max(float(merged["bubble_density"]), 0.55), 0.85)
+        merged["bubble_size_scale"] = min(max(float(merged["bubble_size_scale"]), 0.9), 1.05)
+        merged["vortex_strength"] = min(max(float(merged.get("vortex_strength", 0.75)), 0.6), 0.9)
+        merged["vortex_animation_strength"] = min(max(float(merged.get("vortex_animation_strength", 0.7)), 0.55), 0.85)
+        merged["vortex_visibility"] = min(max(float(merged["vortex_visibility"]), 0.65), 0.85)
+        merged["wake_vortex_count"] = min(max(int(merged["wake_vortex_count"]), 3), 4)
+    else:
+        merged["show_cavitation_bubbles"] = bool(merged.get("show_cavitation_bubbles", True))
+        merged["cavitation_strength"] = min(max(float(merged.get("cavitation_strength", 0.7)), 0.55), 1.0)
+        merged["bubble_density"] = min(max(float(merged["bubble_density"]), 0.85), 1.2)
+        merged["bubble_size_scale"] = min(max(float(merged["bubble_size_scale"]), 1.05), 1.35)
+        merged["vortex_strength"] = min(max(float(merged.get("vortex_strength", 1.0)), 0.85), 1.2)
+        merged["vortex_animation_strength"] = min(max(float(merged.get("vortex_animation_strength", 1.0)), 0.85), 1.2)
+        merged["vortex_visibility"] = min(max(float(merged["vortex_visibility"]), 0.8), 1.0)
+        merged["wake_vortex_count"] = min(max(int(merged["wake_vortex_count"]), 5), 6)
     return merged
 
 
@@ -480,6 +570,7 @@ def build_current_params(st_module) -> dict[str, Any]:
             "cavitation_strength": float(_state_value(st_module, "cavitation_strength")),
             "vane_deploy_angle": float(_state_value(st_module, "vane_deploy_angle")),
             "quality_mode": str(_state_value(st_module, "quality_mode")),
+            "visual_style": str(_state_value(st_module, "visual_style")),
             "pressure_background": bool(_state_value(st_module, "pressure_background")),
             "show_pressure": bool(_state_value(st_module, "show_pressure")),
             "show_particles": bool(_state_value(st_module, "show_particles")),
@@ -493,6 +584,11 @@ def build_current_params(st_module) -> dict[str, Any]:
             "speed_colormap_strength": float(_state_value(st_module, "speed_colormap_strength")),
             "vortex_animation_strength": float(_state_value(st_module, "vortex_animation_strength")),
             "blade_animation_strength": float(_state_value(st_module, "blade_animation_strength")),
+            "bubble_density": float(_state_value(st_module, "bubble_density")),
+            "bubble_size_scale": float(_state_value(st_module, "bubble_size_scale")),
+            "vortex_visibility": float(_state_value(st_module, "vortex_visibility")),
+            "vortex_core_size": float(_state_value(st_module, "vortex_core_size")),
+            "wake_vortex_count": int(_state_value(st_module, "wake_vortex_count")),
             "show_separation_zone": bool(_state_value(st_module, "show_separation_zone")),
             "show_blade_animation": bool(_state_value(st_module, "show_blade_animation")),
             "show_wake_highlight": bool(_state_value(st_module, "show_wake_highlight")),
@@ -572,9 +668,15 @@ def exportable_extra(params: dict[str, Any]) -> dict[str, Any]:
         "cavitation_strength": visual.get("cavitation_strength", 0.3),
         "vane_deploy_angle": visual.get("vane_deploy_angle", 24.0),
         "quality_mode": visual.get("quality_mode", "流畅"),
+        "visual_style": visual.get("visual_style", "natural_water"),
         "pressure_background": visual.get("pressure_background", True),
         "wake_highlight_strength": visual.get("wake_highlight_strength", 1.0),
         "speed_colormap_strength": visual.get("speed_colormap_strength", 1.0),
         "vortex_animation_strength": visual.get("vortex_animation_strength", 0.8),
         "blade_animation_strength": visual.get("blade_animation_strength", 1.0),
+        "bubble_density": visual.get("bubble_density", 0.4),
+        "bubble_size_scale": visual.get("bubble_size_scale", 0.8),
+        "vortex_visibility": visual.get("vortex_visibility", 0.55),
+        "vortex_core_size": visual.get("vortex_core_size", 0.85),
+        "wake_vortex_count": visual.get("wake_vortex_count", 2),
     }

@@ -56,6 +56,12 @@ def canvas_payload(
     shadow_level = int(extra.get("shadow_level", 0))
     max_dpr = float(extra.get("max_dpr", 1.0))
     auto_degrade_enabled = bool(extra.get("auto_degrade_enabled", True))
+    visual_style = str(extra.get("visual_style", "natural_water"))
+    bubble_density = float(extra.get("bubble_density", 0.4))
+    bubble_size_scale = float(extra.get("bubble_size_scale", 0.8))
+    vortex_visibility = float(extra.get("vortex_visibility", 0.55))
+    vortex_core_size = float(extra.get("vortex_core_size", 0.85))
+    wake_vortex_count = int(extra.get("wake_vortex_count", 2))
 
     zone_settings = normalize_zone_settings(zones)
     zone_payload = {
@@ -127,6 +133,12 @@ def canvas_payload(
         "shadowLevel": shadow_level,
         "maxDpr": max_dpr,
         "autoDegradeEnabled": auto_degrade_enabled,
+        "visualStyle": visual_style,
+        "bubbleDensity": bubble_density,
+        "bubbleSizeScale": bubble_size_scale,
+        "vortexVisibility": vortex_visibility,
+        "vortexCoreSize": vortex_core_size,
+        "wakeVortexCount": wake_vortex_count,
         "foilOutline": outline,
         "pressureBackground": pressure_background or [],
     }

@@ -39,45 +39,67 @@ def render_particle_parameters() -> None:
     section_title("基础流动")
     if st.session_state.get("quality_mode") not in ("流畅", "平衡", "炸裂"):
         st.session_state["quality_mode"] = "流畅"
+    if st.session_state.get("visual_style") not in ("natural_water", "tech_highlight"):
+        st.session_state["visual_style"] = "natural_water"
     st.session_state["particle_count"] = min(2500, max(300, int(st.session_state.get("particle_count", 600))))
     st.session_state["trail_length"] = min(12, max(2, int(st.session_state.get("trail_length", 3))))
 
-    st.radio("画质模式", ["流畅", "平衡", "炸裂"], key="quality_mode", horizontal=True)
-    st.caption("流畅模式适合云端默认运行；炸裂模式保留全部高级效果，适合截图展示，可能较卡。")
-    c1, c2 = st.columns(2)
-    for idx, name in enumerate(VISUAL_PRESETS):
-        target = c1 if idx % 2 == 0 else c2
-        if target.button(name, key=f"visual_preset_{name}", use_container_width=True):
-            apply_visual_preset_to_state(st, name)
-            rerun_streamlit()
-    if st.button("应用高画质参数", key="apply_cinematic_visuals", use_container_width=True):
-        apply_visual_preset_to_state(st, "炸裂截图")
-        rerun_streamlit()
+    with st.expander("基础流动", expanded=True):
+        st.slider("流速 U (m/s)", 2.0, 20.0, key="U", step=0.2)
+        st.slider("攻角 alpha (deg)", -2.0, 12.0, key="alpha", step=0.2)
+        st.slider("动画速度", 0.2, 3.0, key="animation_speed", step=0.1)
+        st.slider("粒子数量", 300, 2500, key="particle_count", step=100)
+        st.slider("粒子拖尾长度", 2, 12, key="trail_length", step=1)
+        st.slider("粒子发射强度", 0.2, 1.4, key="emission_strength", step=0.05)
+        st.slider("流线贴附强度", 0.1, 1.3, key="attachment_strength", step=0.05)
+        st.slider("尾迹强度", 0.0, 1.6, key="wake_strength", step=0.05)
 
-    st.slider("流速 U (m/s)", 2.0, 20.0, key="U", step=0.2)
-    st.slider("攻角 alpha (deg)", -2.0, 12.0, key="alpha", step=0.2)
-    st.slider("动画速度", 0.2, 3.0, key="animation_speed", step=0.1)
-    st.slider("粒子数量", 300, 2500, key="particle_count", step=100)
-    st.slider("粒子拖尾长度", 2, 12, key="trail_length", step=1)
-    st.slider("粒子发射强度", 0.2, 1.4, key="emission_strength", step=0.05)
-    st.slider("流线贴附强度", 0.1, 1.3, key="attachment_strength", step=0.05)
-    st.slider("尾迹强度", 0.0, 1.6, key="wake_strength", step=0.05)
-    st.slider("涡旋强度", 0.0, 1.6, key="vortex_strength", step=0.05)
-    st.slider("分离区强度", 0.0, 1.6, key="separation_strength", step=0.05)
-    st.slider("空化强度", 0.0, 1.6, key="cavitation_strength", step=0.05)
-    st.slider("叶片展开角 (deg)", 0.0, 35.0, key="vane_deploy_angle", step=0.5)
-    st.checkbox("压力背景", key="show_pressure")
-    st.checkbox("显示粒子", key="show_particles")
-    st.checkbox("叶片示意", key="show_vanes")
-    st.checkbox("显示空化气泡", key="show_cavitation_bubbles")
-    st.checkbox("显示分离区", key="show_separation")
-    st.checkbox("涡旋显示", key="show_vortex")
-    st.checkbox("A/B/C 标识", key="show_zone_labels")
-    st.toggle("暂停/播放", key="playing")
-    section_title("A/B/C 分区")
-    render_zone_controls("A", "扰动强度")
-    render_zone_controls("B", "扰动强度")
-    render_zone_controls("C", "整流强度")
+    with st.expander("画质与性能", expanded=True):
+        st.radio("画质模式", ["流畅", "平衡", "炸裂"], key="quality_mode", horizontal=True)
+        st.selectbox(
+            "视觉风格",
+            ["natural_water", "tech_highlight"],
+            key="visual_style",
+            format_func=lambda value: "自然水流" if value == "natural_water" else "科技高亮",
+        )
+        st.caption("默认使用自然水流风格；炸裂模式保留全部高级效果，适合截图展示，可能较卡。")
+        c1, c2 = st.columns(2)
+        for idx, name in enumerate(VISUAL_PRESETS):
+            target = c1 if idx % 2 == 0 else c2
+            if target.button(name, key=f"visual_preset_{name}", use_container_width=True):
+                apply_visual_preset_to_state(st, name)
+                rerun_streamlit()
+        if st.button("应用高画质参数", key="apply_cinematic_visuals", use_container_width=True):
+            apply_visual_preset_to_state(st, "炸裂截图")
+            rerun_streamlit()
+        st.checkbox("压力背景", key="show_pressure")
+        st.checkbox("显示粒子", key="show_particles")
+        st.checkbox("A/B/C 标识", key="show_zone_labels")
+        st.toggle("暂停/播放", key="playing")
+
+    with st.expander("空化气泡", expanded=True):
+        st.checkbox("显示空化气泡", key="show_cavitation_bubbles")
+        st.slider("空化气泡强度", 0.0, 1.6, key="cavitation_strength", step=0.05)
+        st.slider("气泡密度", 0.0, 1.4, key="bubble_density", step=0.05)
+        st.slider("气泡尺寸", 0.5, 1.6, key="bubble_size_scale", step=0.05)
+
+    with st.expander("漩涡涡流", expanded=True):
+        st.checkbox("显示局部涡旋", key="show_local_vortices")
+        st.slider("涡旋强度", 0.0, 1.6, key="vortex_strength", step=0.05)
+        st.slider("涡旋可见度", 0.0, 1.2, key="vortex_visibility", step=0.05)
+        st.slider("涡旋动画强度", 0.0, 1.4, key="vortex_animation_strength", step=0.05)
+        st.slider("涡核尺寸", 0.5, 1.6, key="vortex_core_size", step=0.05)
+        st.slider("尾迹涡旋数量", 1, 6, key="wake_vortex_count", step=1)
+
+    with st.expander("叶片与分区", expanded=True):
+        st.slider("分离区强度", 0.0, 1.6, key="separation_strength", step=0.05)
+        st.slider("叶片展开角 (deg)", 0.0, 35.0, key="vane_deploy_angle", step=0.5)
+        st.checkbox("叶片示意", key="show_vanes")
+        st.checkbox("显示分离区", key="show_separation")
+        st.checkbox("涡旋显示", key="show_vortex")
+        render_zone_controls("A", "扰动强度")
+        render_zone_controls("B", "扰动强度")
+        render_zone_controls("C", "整流强度")
 
 
 def render_pressure_parameters() -> None:
@@ -246,6 +268,9 @@ def render_right_panel(result: dict, params: dict[str, Any], display_density: st
         _data_card("分离区强度", _format_float(visual.get("separation_strength", 0.4)))
         _data_card("空化强度", _format_float(visual.get("cavitation_strength", 0.3)))
         _data_card("渲染模式", visual.get("quality_mode", "流畅"))
+        _data_card("视觉风格", "自然水流" if visual.get("visual_style", "natural_water") == "natural_water" else "科技高亮")
+        _data_card("气泡密度", _format_float(visual.get("bubble_density", 0.4)))
+        _data_card("涡旋可见度", _format_float(visual.get("vortex_visibility", 0.55)))
         _data_card("目标帧率", f"{visual.get('target_fps', 60)} fps")
         _data_card("实际粒子上限", str(visual.get("mode_max_particles", 900)))
         _data_card("自动降级", "Canvas 内部启用" if visual.get("auto_degrade_enabled", True) else "关闭")

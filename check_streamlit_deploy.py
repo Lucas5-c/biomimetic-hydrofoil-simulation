@@ -195,7 +195,21 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
     report.append("## Canvas Payload Visual Parameters")
     try:
         from components.flow_canvas import canvas_payload as component_canvas_payload
-        from core.params import QUALITY_MODE_LIMITS, ZONE_UI, apply_quality_limits, merge_visual_defaults
+        from core.params import QUALITY_MODE_LIMITS, VISUAL_DEFAULTS, ZONE_UI, apply_quality_limits, merge_visual_defaults
+
+        required_visual_defaults = [
+            "visual_style",
+            "bubble_density",
+            "bubble_size_scale",
+            "vortex_visibility",
+            "vortex_core_size",
+            "wake_vortex_count",
+        ]
+        missing_defaults = [key for key in required_visual_defaults if key not in VISUAL_DEFAULTS]
+        if missing_defaults:
+            raise RuntimeError(f"missing visual defaults: {', '.join(missing_defaults)}")
+        if VISUAL_DEFAULTS["visual_style"] != "natural_water":
+            raise RuntimeError("default visual style must be natural_water")
 
         component_payload = component_canvas_payload(
             velocity=8.0,
@@ -221,9 +235,18 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
             vortex_animation_strength=0.8,
             show_blade_animation=True,
             blade_animation_strength=1.0,
+            visual_style="natural_water",
+            bubble_density=0.7,
+            bubble_size_scale=1.0,
+            vortex_visibility=0.75,
+            vortex_core_size=1.0,
+            wake_vortex_count=4,
         )
         assert component_payload["show_separation"] is True
         assert component_payload["separation_strength"] == 0.8
+        assert component_payload["visual_style"] == "natural_water"
+        assert component_payload["bubble_density"] == 0.7
+        assert component_payload["wake_vortex_count"] == 4
         if set(QUALITY_MODE_LIMITS) != {"流畅", "平衡", "炸裂"}:
             raise RuntimeError("quality modes must be 流畅 / 平衡 / 炸裂")
 
@@ -245,6 +268,7 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
                     "show_speed_colormap": True,
                     "show_wake_highlight": True,
                     "show_blade_animation": True,
+                    "visual_style": "natural_water",
                 },
                 fast_preview=False,
             )
@@ -268,6 +292,12 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
                 shadow_level=visual_mode["shadow_level"],
                 max_dpr=visual_mode["max_dpr"],
                 auto_degrade_enabled=visual_mode["auto_degrade_enabled"],
+                visual_style=visual_mode["visual_style"],
+                bubble_density=visual_mode["bubble_density"],
+                bubble_size_scale=visual_mode["bubble_size_scale"],
+                vortex_visibility=visual_mode["vortex_visibility"],
+                vortex_core_size=visual_mode["vortex_core_size"],
+                wake_vortex_count=visual_mode["wake_vortex_count"],
             )
             if mode_payload["qualityMode"] != mode:
                 raise RuntimeError(f"quality mode payload mismatch for {mode}")
@@ -299,6 +329,12 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
                 "show_wake_highlight": True,
                 "show_speed_colormap": True,
                 "show_local_vortices": True,
+                "visual_style": "natural_water",
+                "bubble_density": 0.7,
+                "bubble_size_scale": 1.0,
+                "vortex_visibility": 0.75,
+                "vortex_core_size": 1.0,
+                "wake_vortex_count": 4,
             }
             ),
             fast_preview=False,
@@ -339,6 +375,12 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
             vortex_animation_strength=visual.get("vortex_animation_strength", 0.8),
             show_blade_animation=visual.get("show_blade_animation", True),
             blade_animation_strength=visual.get("blade_animation_strength", 1.0),
+            visual_style=visual.get("visual_style", "natural_water"),
+            bubble_density=visual.get("bubble_density", 0.4),
+            bubble_size_scale=visual.get("bubble_size_scale", 0.8),
+            vortex_visibility=visual.get("vortex_visibility", 0.55),
+            vortex_core_size=visual.get("vortex_core_size", 0.85),
+            wake_vortex_count=visual.get("wake_vortex_count", 2),
             target_fps=visual.get("target_fps", 60),
             mode_max_particles=visual.get("mode_max_particles", 900),
             mode_max_trail=visual.get("mode_max_trail", 4),
@@ -371,6 +413,12 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
             "shadowLevel",
             "maxDpr",
             "autoDegradeEnabled",
+            "visualStyle",
+            "bubbleDensity",
+            "bubbleSizeScale",
+            "vortexVisibility",
+            "vortexCoreSize",
+            "wakeVortexCount",
         ]
         missing = [key for key in required_keys if key not in payload]
         if missing:

@@ -35,7 +35,7 @@ def canvas_payload(
     emission_rate: float | None = None,
     attachment_strength: float = 0.78,
     wake_strength: float = 0.72,
-    vortex_strength: float = 0.7,
+    vortex_strength: float = 0.45,
     pressure_background: bool | list[list[float]] | None = True,
     show_particles: bool = True,
     **extra: object,
@@ -110,6 +110,12 @@ def canvas_payload(
             "show_cavitation": show_cavitation_bubbles,
             "show_cavitation_bubbles": show_cavitation_bubbles,
             "cavitation_strength": cavitation_strength,
+            "visual_style": extra.get("visual_style", "natural_water"),
+            "bubble_density": float(extra.get("bubble_density", 0.4)),
+            "bubble_size_scale": float(extra.get("bubble_size_scale", 0.8)),
+            "vortex_visibility": float(extra.get("vortex_visibility", 0.55)),
+            "vortex_core_size": float(extra.get("vortex_core_size", 0.85)),
+            "wake_vortex_count": int(extra.get("wake_vortex_count", 2)),
         }
     )
     return payload
