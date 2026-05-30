@@ -8,7 +8,7 @@ import numpy as np
 import streamlit as st
 
 from .layout import panel_header, section_title
-from .params import GRID_OPTIONS, MODULES, PRESETS, ZONE_UI, apply_preset_to_state
+from .params import GRID_OPTIONS, MODULES, PRESETS, VISUAL_PRESETS, ZONE_UI, apply_preset_to_state, apply_visual_preset_to_state
 
 
 def rerun_streamlit() -> None:
@@ -37,11 +37,28 @@ def render_presets() -> None:
 
 def render_particle_parameters() -> None:
     section_title("基础流动")
+    if st.session_state.get("quality_mode") not in ("流畅", "平衡", "炸裂"):
+        st.session_state["quality_mode"] = "流畅"
+    st.session_state["particle_count"] = min(2500, max(300, int(st.session_state.get("particle_count", 600))))
+    st.session_state["trail_length"] = min(12, max(2, int(st.session_state.get("trail_length", 3))))
+
+    st.radio("画质模式", ["流畅", "平衡", "炸裂"], key="quality_mode", horizontal=True)
+    st.caption("流畅模式适合云端默认运行；炸裂模式保留全部高级效果，适合截图展示，可能较卡。")
+    c1, c2 = st.columns(2)
+    for idx, name in enumerate(VISUAL_PRESETS):
+        target = c1 if idx % 2 == 0 else c2
+        if target.button(name, key=f"visual_preset_{name}", use_container_width=True):
+            apply_visual_preset_to_state(st, name)
+            rerun_streamlit()
+    if st.button("应用高画质参数", key="apply_cinematic_visuals", use_container_width=True):
+        apply_visual_preset_to_state(st, "炸裂截图")
+        rerun_streamlit()
+
     st.slider("流速 U (m/s)", 2.0, 20.0, key="U", step=0.2)
     st.slider("攻角 alpha (deg)", -2.0, 12.0, key="alpha", step=0.2)
     st.slider("动画速度", 0.2, 3.0, key="animation_speed", step=0.1)
-    st.slider("粒子数量", 150, 1800, key="particle_count", step=50)
-    st.slider("粒子拖尾长度", 6, 42, key="trail_length", step=1)
+    st.slider("粒子数量", 300, 2500, key="particle_count", step=100)
+    st.slider("粒子拖尾长度", 2, 12, key="trail_length", step=1)
     st.slider("粒子发射强度", 0.2, 1.4, key="emission_strength", step=0.05)
     st.slider("流线贴附强度", 0.1, 1.3, key="attachment_strength", step=0.05)
     st.slider("尾迹强度", 0.0, 1.6, key="wake_strength", step=0.05)
@@ -49,7 +66,6 @@ def render_particle_parameters() -> None:
     st.slider("分离区强度", 0.0, 1.6, key="separation_strength", step=0.05)
     st.slider("空化强度", 0.0, 1.6, key="cavitation_strength", step=0.05)
     st.slider("叶片展开角 (deg)", 0.0, 35.0, key="vane_deploy_angle", step=0.5)
-    st.radio("渲染模式", ["高画质", "高性能"], key="quality_mode", horizontal=True)
     st.checkbox("压力背景", key="show_pressure")
     st.checkbox("显示粒子", key="show_particles")
     st.checkbox("叶片示意", key="show_vanes")
@@ -223,14 +239,16 @@ def render_right_panel(result: dict, params: dict[str, Any], display_density: st
 
     section_title("模块附加指标")
     if module == "动态水流粒子":
-        _data_card("当前粒子数", str(visual["particle_count"]))
-        _data_card("粒子速度倍率", _format_float(visual["animation_speed"]))
-        _data_card("尾迹强度", _format_float(visual["wake_strength"]))
-        _data_card("涡旋强度", _format_float(visual["vortex_strength"]))
-        _data_card("分离区强度", _format_float(visual.get("separation_strength", 0.8)))
-        _data_card("空化强度", _format_float(visual.get("cavitation_strength", 0.7)))
-        _data_card("渲染模式", visual.get("quality_mode", "高画质"))
-        _data_card("目标帧率", "60 fps")
+        _data_card("当前粒子数", str(visual.get("particle_count", 600)))
+        _data_card("粒子速度倍率", _format_float(visual.get("animation_speed", 1.0)))
+        _data_card("尾迹强度", _format_float(visual.get("wake_strength", 0.8)))
+        _data_card("涡旋强度", _format_float(visual.get("vortex_strength", 0.5)))
+        _data_card("分离区强度", _format_float(visual.get("separation_strength", 0.4)))
+        _data_card("空化强度", _format_float(visual.get("cavitation_strength", 0.3)))
+        _data_card("渲染模式", visual.get("quality_mode", "流畅"))
+        _data_card("目标帧率", f"{visual.get('target_fps', 60)} fps")
+        _data_card("实际粒子上限", str(visual.get("mode_max_particles", 900)))
+        _data_card("自动降级", "Canvas 内部启用" if visual.get("auto_degrade_enabled", True) else "关闭")
     elif module == "压力云图":
         p = result["pressure_kpa"]
         min_idx = np.nanargmin(p)

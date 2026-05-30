@@ -44,30 +44,31 @@ ZONE_UI = {
 }
 
 VISUAL_DEFAULTS: dict[str, Any] = {
-    "particle_count": 850,
+    "particle_count": 600,
     "animation_speed": 1.0,
-    "trail_length": 20,
-    "emission_strength": 0.70,
+    "trail_length": 3,
+    "emission_strength": 0.80,
     "attachment_strength": 0.78,
-    "wake_strength": 0.72,
-    "vortex_strength": 0.70,
-    "separation_strength": 0.8,
-    "cavitation_strength": 0.7,
+    "wake_strength": 0.80,
+    "vortex_strength": 0.50,
+    "separation_strength": 0.4,
+    "cavitation_strength": 0.3,
     "vane_deploy_angle": 24.0,
-    "quality_mode": "高画质",
+    "quality_mode": "流畅",
+    "pressure_background": True,
     "show_pressure": True,
     "show_particles": True,
     "show_vortex": True,
     "show_vanes": True,
-    "show_cavitation_bubbles": True,
-    "show_separation": True,
+    "show_cavitation_bubbles": False,
+    "show_separation": False,
     "show_zone_labels": True,
     "playing": True,
     "wake_highlight_strength": 1.0,
     "speed_colormap_strength": 1.0,
     "vortex_animation_strength": 0.8,
     "blade_animation_strength": 1.0,
-    "show_separation_zone": True,
+    "show_separation_zone": False,
     "show_blade_animation": True,
     "show_wake_highlight": True,
     "show_speed_colormap": True,
@@ -83,28 +84,29 @@ DEFAULT_STATE: dict[str, Any] = {
     "grid_density": "中",
     "fast_preview": True,
     "show_vortex": True,
-    "particle_count": 850,
+    "particle_count": 600,
     "particle_level": "中",
     "animation_speed": 1.0,
-    "trail_length": 20,
-    "emission_strength": 0.70,
+    "trail_length": 3,
+    "emission_strength": 0.80,
     "attachment_strength": 0.78,
-    "wake_strength": 0.72,
-    "vortex_strength": 0.70,
-    "separation_strength": 0.8,
-    "cavitation_strength": 0.7,
+    "wake_strength": 0.80,
+    "vortex_strength": 0.50,
+    "separation_strength": 0.4,
+    "cavitation_strength": 0.3,
     "vane_deploy_angle": 24.0,
-    "quality_mode": "高画质",
+    "quality_mode": "流畅",
+    "pressure_background": True,
     "show_pressure": True,
     "show_particles": True,
     "show_vanes": True,
-    "show_cavitation_bubbles": True,
-    "show_separation": True,
+    "show_cavitation_bubbles": False,
+    "show_separation": False,
     "wake_highlight_strength": 1.0,
     "speed_colormap_strength": 1.0,
     "vortex_animation_strength": 0.8,
     "blade_animation_strength": 1.0,
-    "show_separation_zone": True,
+    "show_separation_zone": False,
     "show_blade_animation": True,
     "show_wake_highlight": True,
     "show_speed_colormap": True,
@@ -203,6 +205,112 @@ PRESETS = {
 }
 
 
+QUALITY_MODE_LIMITS: dict[str, dict[str, Any]] = {
+    "流畅": {
+        "max_particles": 900,
+        "max_trail": 4,
+        "target_fps": 60,
+        "bubble_cap": 0,
+        "vortex_marks": 2,
+        "shadow_level": 0,
+        "dpr": 1.0,
+    },
+    "平衡": {
+        "max_particles": 1400,
+        "max_trail": 7,
+        "target_fps": 50,
+        "bubble_cap": 40,
+        "vortex_marks": 4,
+        "shadow_level": 1,
+        "dpr": 1.25,
+    },
+    "炸裂": {
+        "max_particles": 2500,
+        "max_trail": 12,
+        "target_fps": 45,
+        "bubble_cap": 120,
+        "vortex_marks": 6,
+        "shadow_level": 2,
+        "dpr": 1.5,
+    },
+}
+
+VISUAL_PRESETS: dict[str, dict[str, Any]] = {
+    "流畅演示": {
+        "quality_mode": "流畅",
+        "particle_count": 600,
+        "trail_length": 3,
+        "emission_strength": 0.8,
+        "wake_strength": 0.8,
+        "vortex_strength": 0.5,
+        "separation_strength": 0.4,
+        "cavitation_strength": 0.3,
+        "show_cavitation_bubbles": False,
+        "show_separation": False,
+        "show_separation_zone": False,
+        "show_wake_highlight": True,
+        "show_speed_colormap": True,
+        "show_blade_animation": True,
+        "show_local_vortices": True,
+        "fast_preview": True,
+    },
+    "平衡展示": {
+        "quality_mode": "平衡",
+        "particle_count": 1000,
+        "trail_length": 5,
+        "emission_strength": 0.9,
+        "wake_strength": 0.9,
+        "vortex_strength": 0.7,
+        "separation_strength": 0.55,
+        "cavitation_strength": 0.45,
+        "show_cavitation_bubbles": True,
+        "show_separation": True,
+        "show_separation_zone": True,
+        "show_wake_highlight": True,
+        "show_speed_colormap": True,
+        "show_blade_animation": True,
+        "show_local_vortices": True,
+        "fast_preview": True,
+    },
+    "炸裂截图": {
+        "quality_mode": "炸裂",
+        "particle_count": 1800,
+        "trail_length": 10,
+        "emission_strength": 1.15,
+        "wake_strength": 1.25,
+        "vortex_strength": 1.0,
+        "separation_strength": 0.9,
+        "cavitation_strength": 0.8,
+        "show_cavitation_bubbles": True,
+        "show_separation": True,
+        "show_separation_zone": True,
+        "show_wake_highlight": True,
+        "show_speed_colormap": True,
+        "show_blade_animation": True,
+        "show_local_vortices": True,
+        "fast_preview": False,
+    },
+    "低配电脑模式": {
+        "quality_mode": "流畅",
+        "particle_count": 400,
+        "trail_length": 2,
+        "emission_strength": 0.65,
+        "wake_strength": 0.55,
+        "vortex_strength": 0.3,
+        "separation_strength": 0.2,
+        "cavitation_strength": 0.15,
+        "show_cavitation_bubbles": False,
+        "show_separation": False,
+        "show_separation_zone": False,
+        "show_wake_highlight": True,
+        "show_speed_colormap": True,
+        "show_blade_animation": True,
+        "show_local_vortices": True,
+        "fast_preview": True,
+    },
+}
+
+
 def init_session_state(st_module) -> None:
     for key, value in DEFAULT_STATE.items():
         st_module.session_state.setdefault(key, deepcopy(value))
@@ -222,6 +330,62 @@ def apply_preset_to_state(st_module, preset_name: str) -> None:
         st_module.session_state[f"{zone}_enabled"] = enabled
         st_module.session_state[f"{zone}_angle"] = angle
         st_module.session_state[f"{zone}_response"] = response
+
+
+def apply_visual_preset_to_state(st_module, preset_name: str) -> None:
+    preset = VISUAL_PRESETS[preset_name]
+    for key, value in preset.items():
+        st_module.session_state[key] = deepcopy(value)
+
+
+def normalize_quality_mode(mode: str | None) -> str:
+    aliases = {
+        "Performance": "流畅",
+        "High Performance": "流畅",
+        "高性能": "流畅",
+        "流畅模式": "流畅",
+        "Balanced": "平衡",
+        "平衡模式": "平衡",
+        "Cinematic": "炸裂",
+        "高画质": "炸裂",
+        "炸裂模式": "炸裂",
+    }
+    value = str(mode or "流畅")
+    return aliases.get(value, value if value in QUALITY_MODE_LIMITS else "流畅")
+
+
+def apply_quality_limits(visual: dict[str, Any], fast_preview: bool = False) -> dict[str, Any]:
+    merged = merge_visual_defaults(visual)
+    mode = normalize_quality_mode(merged.get("quality_mode"))
+    if fast_preview and mode == "炸裂":
+        mode = "平衡"
+    limits = QUALITY_MODE_LIMITS[mode]
+
+    merged["quality_mode"] = mode
+    merged["quality_label"] = mode
+    merged["target_fps"] = limits["target_fps"]
+    merged["auto_degrade_enabled"] = True
+    merged["mode_max_particles"] = limits["max_particles"]
+    merged["mode_max_trail"] = limits["max_trail"]
+    merged["bubble_cap"] = 0 if fast_preview and mode == "流畅" else limits["bubble_cap"]
+    merged["vortex_mark_count"] = limits["vortex_marks"]
+    merged["shadow_level"] = limits["shadow_level"]
+    merged["max_dpr"] = limits["dpr"]
+
+    merged["particle_count"] = min(int(merged.get("particle_count", 600)), limits["max_particles"])
+    merged["trail_length"] = min(int(merged.get("trail_length", 3)), limits["max_trail"])
+    if mode == "流畅" or fast_preview:
+        merged["trail_length"] = min(int(merged["trail_length"]), 4)
+        merged["show_cavitation_bubbles"] = False
+        merged["show_separation"] = bool(merged.get("show_separation", False)) and float(merged.get("separation_strength", 0.0)) > 0.65
+        merged["show_separation_zone"] = merged["show_separation"]
+        merged["cavitation_strength"] = min(float(merged.get("cavitation_strength", 0.3)), 0.35)
+        merged["separation_strength"] = min(float(merged.get("separation_strength", 0.4)), 0.45)
+        merged["vortex_strength"] = min(float(merged.get("vortex_strength", 0.5)), 0.55)
+    elif mode == "平衡":
+        merged["cavitation_strength"] = min(float(merged.get("cavitation_strength", 0.45)), 0.65)
+        merged["separation_strength"] = min(float(merged.get("separation_strength", 0.55)), 0.75)
+    return merged
 
 
 def current_zone_settings(st_module) -> dict[str, dict[str, Any]]:
@@ -304,7 +468,7 @@ def build_current_params(st_module) -> dict[str, Any]:
             "fast_preview": bool(st_module.session_state["fast_preview"]),
         },
         "zones": zones,
-        "visual": merge_visual_defaults({
+        "visual": apply_quality_limits({
             "particle_count": int(_state_value(st_module, "particle_count")),
             "animation_speed": float(_state_value(st_module, "animation_speed")),
             "trail_length": int(_state_value(st_module, "trail_length")),
@@ -316,6 +480,7 @@ def build_current_params(st_module) -> dict[str, Any]:
             "cavitation_strength": float(_state_value(st_module, "cavitation_strength")),
             "vane_deploy_angle": float(_state_value(st_module, "vane_deploy_angle")),
             "quality_mode": str(_state_value(st_module, "quality_mode")),
+            "pressure_background": bool(_state_value(st_module, "pressure_background")),
             "show_pressure": bool(_state_value(st_module, "show_pressure")),
             "show_particles": bool(_state_value(st_module, "show_particles")),
             "show_vortex": bool(_state_value(st_module, "show_vortex")),
@@ -355,7 +520,7 @@ def build_current_params(st_module) -> dict[str, Any]:
             "curve_mark_zones": bool(st_module.session_state["curve_mark_zones"]),
             "curve_x_axis": str(st_module.session_state["curve_x_axis"]),
             "curve_y_unit": str(st_module.session_state["curve_y_unit"]),
-        }),
+        }, bool(st_module.session_state["fast_preview"])),
         "export": {
             "scan_target": str(st_module.session_state["scan_target"]),
             "scan_start": float(st_module.session_state["scan_start"]),
@@ -380,7 +545,7 @@ def build_current_params(st_module) -> dict[str, Any]:
 
 def solver_kwargs(params: dict[str, Any], density_override: str | None = None) -> dict[str, Any]:
     flow = params["flow"]
-    visual = merge_visual_defaults(params.get("visual"))
+    visual = apply_quality_limits(params.get("visual"), bool(params.get("flow", {}).get("fast_preview", False)))
     return {
         "velocity": flow["velocity"],
         "alpha_deg": flow["alpha_deg"],
@@ -393,20 +558,21 @@ def solver_kwargs(params: dict[str, Any], density_override: str | None = None) -
 
 
 def exportable_extra(params: dict[str, Any]) -> dict[str, Any]:
-    visual = merge_visual_defaults(params.get("visual"))
+    visual = apply_quality_limits(params.get("visual"), bool(params.get("flow", {}).get("fast_preview", False)))
     return {
         "module": params["module"],
-        "particle_count": visual.get("particle_count", 850),
+        "particle_count": visual.get("particle_count", 600),
         "animation_speed": visual.get("animation_speed", 1.0),
-        "trail_length": visual.get("trail_length", 20),
-        "emission_strength": visual.get("emission_strength", 0.70),
+        "trail_length": visual.get("trail_length", 3),
+        "emission_strength": visual.get("emission_strength", 0.80),
         "attachment_strength": visual.get("attachment_strength", 0.78),
-        "wake_strength": visual.get("wake_strength", 0.72),
-        "vortex_strength": visual.get("vortex_strength", 0.70),
-        "separation_strength": visual.get("separation_strength", 0.8),
-        "cavitation_strength": visual.get("cavitation_strength", 0.7),
+        "wake_strength": visual.get("wake_strength", 0.80),
+        "vortex_strength": visual.get("vortex_strength", 0.50),
+        "separation_strength": visual.get("separation_strength", 0.4),
+        "cavitation_strength": visual.get("cavitation_strength", 0.3),
         "vane_deploy_angle": visual.get("vane_deploy_angle", 24.0),
-        "quality_mode": visual.get("quality_mode", "高画质"),
+        "quality_mode": visual.get("quality_mode", "流畅"),
+        "pressure_background": visual.get("pressure_background", True),
         "wake_highlight_strength": visual.get("wake_highlight_strength", 1.0),
         "speed_colormap_strength": visual.get("speed_colormap_strength", 1.0),
         "vortex_animation_strength": visual.get("vortex_animation_strength", 0.8),

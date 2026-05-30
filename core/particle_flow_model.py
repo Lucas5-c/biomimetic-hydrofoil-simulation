@@ -21,17 +21,17 @@ def canvas_payload(
     show_vanes: bool,
     playing: bool,
     show_zone_labels: bool = True,
-    trail_length: int = 20,
-    emission_strength: float = 0.7,
+    trail_length: int = 3,
+    emission_strength: float = 0.8,
     attachment_strength: float = 0.78,
-    wake_strength: float = 0.72,
-    vortex_strength: float = 0.7,
-    separation_strength: float = 0.8,
-    cavitation_strength: float = 0.7,
+    wake_strength: float = 0.8,
+    vortex_strength: float = 0.5,
+    separation_strength: float = 0.4,
+    cavitation_strength: float = 0.3,
     vane_deploy_angle: float = 24.0,
-    quality_mode: str = "high_quality",
-    show_cavitation_bubbles: bool = True,
-    show_separation: bool = True,
+    quality_mode: str = "流畅",
+    show_cavitation_bubbles: bool = False,
+    show_separation: bool = False,
     pressure_background: list[list[float]] | None = None,
     **extra: object,
 ) -> dict:
@@ -48,6 +48,14 @@ def canvas_payload(
     show_speed_colormap = bool(extra.get("show_speed_colormap", True))
     show_local_vortices = bool(extra.get("show_local_vortices", show_vortex))
     show_blade_animation = bool(extra.get("show_blade_animation", show_vanes))
+    target_fps = int(extra.get("target_fps", 60))
+    mode_max_particles = int(extra.get("mode_max_particles", 900))
+    mode_max_trail = int(extra.get("mode_max_trail", 4))
+    bubble_cap = int(extra.get("bubble_cap", 0))
+    vortex_mark_count = int(extra.get("vortex_mark_count", 2))
+    shadow_level = int(extra.get("shadow_level", 0))
+    max_dpr = float(extra.get("max_dpr", 1.0))
+    auto_degrade_enabled = bool(extra.get("auto_degrade_enabled", True))
 
     zone_settings = normalize_zone_settings(zones)
     zone_payload = {
@@ -111,6 +119,14 @@ def canvas_payload(
         "showLocalVortices": show_local_vortices,
         "showBladeAnimation": show_blade_animation,
         "showSeparationZone": show_separation,
+        "targetFps": target_fps,
+        "modeMaxParticles": mode_max_particles,
+        "modeMaxTrail": mode_max_trail,
+        "bubbleCap": bubble_cap,
+        "vortexMarkCount": vortex_mark_count,
+        "shadowLevel": shadow_level,
+        "maxDpr": max_dpr,
+        "autoDegradeEnabled": auto_degrade_enabled,
         "foilOutline": outline,
         "pressureBackground": pressure_background or [],
     }

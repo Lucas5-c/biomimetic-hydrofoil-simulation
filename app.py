@@ -112,7 +112,7 @@ def export_params(result: dict, params: dict[str, Any]) -> dict[str, Any]:
 
 def canvas_export_params(result: dict, params: dict[str, Any]) -> dict[str, Any]:
     payload = export_params(result, params)
-    payload["particle_count"] = params["visual"]["particle_count"]
+    payload["particle_count"] = params.get("visual", {}).get("particle_count", 600)
     return payload
 
 
@@ -330,7 +330,7 @@ def render_canvas_module(result: dict, params: dict[str, Any]) -> None:
         alpha_deg=params["flow"]["alpha_deg"],
         rho=params["flow"]["rho"],
         cavitation_threshold_kpa=params["flow"]["cavitation_threshold_kpa"],
-        particle_count=visual.get("particle_count", 850) if visual.get("show_particles", True) else 0,
+        particle_count=visual.get("particle_count", 600) if visual.get("show_particles", True) else 0,
         animation_speed=visual.get("animation_speed", 1.0),
         grid_density=params["flow"]["grid_density"],
         zones=params["zones"],
@@ -340,19 +340,20 @@ def render_canvas_module(result: dict, params: dict[str, Any]) -> None:
         show_vanes=visual.get("show_vanes", visual.get("show_blade_animation", True)),
         playing=visual.get("playing", True),
         show_zone_labels=visual.get("show_zone_labels", True),
-        trail_length=visual.get("trail_length", 20),
-        emission_strength=visual.get("emission_strength", 0.70),
+        trail_length=visual.get("trail_length", 3),
+        emission_strength=visual.get("emission_strength", 0.80),
         attachment_strength=visual.get("attachment_strength", 0.78),
         wake_strength=visual.get("wake_strength", visual.get("wake_highlight_strength", 1.0)),
-        vortex_strength=visual.get("vortex_strength", visual.get("vortex_animation_strength", 0.8)),
-        separation_strength=visual.get("separation_strength", 0.8),
-        cavitation_strength=visual.get("cavitation_strength", 0.7),
+        vortex_strength=visual.get("vortex_strength", visual.get("vortex_animation_strength", 0.5)),
+        separation_strength=visual.get("separation_strength", 0.4),
+        cavitation_strength=visual.get("cavitation_strength", 0.3),
         vane_deploy_angle=visual.get("vane_deploy_angle", 24.0),
-        quality_mode=visual.get("quality_mode", "高画质"),
-        show_cavitation_bubbles=visual.get("show_cavitation_bubbles", True),
-        show_separation=visual.get("show_separation", visual.get("show_separation_zone", True)),
-        show_separation_zone=visual.get("show_separation_zone", visual.get("show_separation", True)),
-        show_cavitation=visual.get("show_cavitation", visual.get("show_cavitation_bubbles", True)),
+        quality_mode=visual.get("quality_mode", "流畅"),
+        pressure_background=visual.get("pressure_background", visual.get("show_pressure", True)),
+        show_cavitation_bubbles=visual.get("show_cavitation_bubbles", False),
+        show_separation=visual.get("show_separation", visual.get("show_separation_zone", False)),
+        show_separation_zone=visual.get("show_separation_zone", visual.get("show_separation", False)),
+        show_cavitation=visual.get("show_cavitation", visual.get("show_cavitation_bubbles", False)),
         show_wake_highlight=visual.get("show_wake_highlight", True),
         wake_highlight_strength=visual.get("wake_highlight_strength", visual.get("wake_strength", 1.0)),
         show_speed_colormap=visual.get("show_speed_colormap", True),
@@ -361,6 +362,14 @@ def render_canvas_module(result: dict, params: dict[str, Any]) -> None:
         vortex_animation_strength=visual.get("vortex_animation_strength", visual.get("vortex_strength", 0.8)),
         show_blade_animation=visual.get("show_blade_animation", visual.get("show_vanes", True)),
         blade_animation_strength=visual.get("blade_animation_strength", 1.0),
+        target_fps=visual.get("target_fps", 60),
+        mode_max_particles=visual.get("mode_max_particles", 900),
+        mode_max_trail=visual.get("mode_max_trail", 4),
+        bubble_cap=visual.get("bubble_cap", 0),
+        vortex_mark_count=visual.get("vortex_mark_count", 2),
+        shadow_level=visual.get("shadow_level", 0),
+        max_dpr=visual.get("max_dpr", 1.0),
+        auto_degrade_enabled=visual.get("auto_degrade_enabled", True),
     )
     render_flow_canvas(payload, height=660)
     render_canvas_exports(result, params)

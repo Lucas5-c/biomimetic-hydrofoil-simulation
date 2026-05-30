@@ -30,8 +30,8 @@ def canvas_payload(
     velocity: float,
     angle: float | None = None,
     animation_speed: float = 1.0,
-    particle_count: int = 850,
-    trail_length: int = 20,
+    particle_count: int = 600,
+    trail_length: int = 3,
     emission_rate: float | None = None,
     attachment_strength: float = 0.78,
     wake_strength: float = 0.72,
@@ -52,12 +52,16 @@ def canvas_payload(
     show_vanes = bool(extra.pop("show_vanes", extra.get("show_blade_animation", True)))
     playing = bool(extra.pop("playing", True))
     show_zone_labels = bool(extra.pop("show_zone_labels", True))
-    separation_strength = float(extra.pop("separation_strength", 0.8))
-    cavitation_strength = float(extra.pop("cavitation_strength", 0.7))
+    separation_strength = float(extra.pop("separation_strength", 0.4))
+    cavitation_strength = float(extra.pop("cavitation_strength", 0.3))
     vane_deploy_angle = float(extra.pop("vane_deploy_angle", 24.0))
-    quality_mode = str(extra.pop("quality_mode", "high_quality"))
-    show_separation = bool(extra.pop("show_separation", extra.get("show_separation_zone", True)))
-    show_cavitation_bubbles = bool(extra.pop("show_cavitation_bubbles", extra.get("show_cavitation", True)))
+    quality_mode = str(extra.pop("quality_mode", "流畅"))
+    show_separation = bool(extra.pop("show_separation", extra.get("show_separation_zone", False)))
+    show_cavitation_bubbles = bool(extra.pop("show_cavitation_bubbles", extra.get("show_cavitation", False)))
+    mode_max_particles = int(extra.get("mode_max_particles", 900))
+    mode_max_trail = int(extra.get("mode_max_trail", 4))
+    particle_count = min(int(particle_count), mode_max_particles)
+    trail_length = min(int(trail_length), mode_max_trail)
     pressure_field = pressure_background if isinstance(pressure_background, list) else None
 
     payload = _core_canvas_payload(

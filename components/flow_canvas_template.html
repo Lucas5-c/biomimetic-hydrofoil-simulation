@@ -101,8 +101,28 @@ let lastTime = performance.now();
 const animationStart = performance.now();
 let particles = [];
 let bubbles = [];
+let fpsEstimate = 60;
+let autoDegraded = false;
+let runtimeScale = 1.0;
+let frameSamples = [];
+let visible = true;
+let backgroundCache = null;
+let backgroundCacheW = 0;
+let backgroundCacheH = 0;
 
-const highQuality = payload.qualityMode !== "高性能";
+function normalizedModeName(mode) {
+  const value = String(mode || "流畅");
+  if (["Performance", "High Performance", "高性能", "流畅", "流畅模式"].includes(value)) return "流畅";
+  if (["Balanced", "平衡", "平衡模式"].includes(value)) return "平衡";
+  if (["Cinematic", "高画质", "炸裂", "炸裂模式"].includes(value)) return "炸裂";
+  return "流畅";
+}
+
+const modeName = normalizedModeName(payload.qualityMode);
+const isPerformance = modeName === "流畅";
+const isBalanced = modeName === "平衡";
+const isCinematic = modeName === "炸裂";
+const highQuality = isCinematic;
 const speedGain = clamp(payload.velocity / 8.0, 0.25, 2.7);
 const alphaPos = Math.max(0, payload.alphaDeg);
 const alphaGain = clamp(alphaPos / 12.0, 0, 1.4);
@@ -112,8 +132,14 @@ const attachGain = clamp(payload.attachmentStrength || 0.8, 0.1, 1.6);
 const emitGain = clamp(payload.emissionStrength || 0.7, 0.15, 1.8);
 const separationGain = Math.max(0, payload.separationStrength || 0);
 const cavitationGain = Math.max(0, payload.cavitationStrength || 0);
-const trailLimit = Math.max(6, Math.min(highQuality ? 78 : 44, payload.trailLength + Math.round(speedGain * 8)));
-const vaneTransitionMs = highQuality ? 680 : 380;
+const targetFps = payload.targetFps || (isCinematic ? 45 : isBalanced ? 50 : 60);
+const shadowLevel = Math.max(0, Math.min(2, payload.shadowLevel ?? (isCinematic ? 2 : isBalanced ? 1 : 0)));
+const maxTrailByMode = payload.modeMaxTrail || (isCinematic ? 12 : isBalanced ? 7 : 4);
+const trailLimit = Math.max(2, Math.min(maxTrailByMode, payload.trailLength || (isCinematic ? 10 : isBalanced ? 5 : 3)));
+const particleCapByMode = payload.modeMaxParticles || (isCinematic ? 2500 : isBalanced ? 1400 : 900);
+const bubbleCapByMode = payload.bubbleCap ?? (isCinematic ? 120 : isBalanced ? 40 : 0);
+const vortexMarkCount = payload.vortexMarkCount || (isCinematic ? 6 : isBalanced ? 4 : 2);
+const vaneTransitionMs = isCinematic ? 680 : isBalanced ? 520 : 340;
 const vortexCenters = [
   { x: 0.83, y: 0.070, r: 0.095, spin: 1.00, zone: "B" },
   { x: 0.90, y: 0.018, r: 0.118, spin: -0.95, zone: "C" },
@@ -121,6 +147,7 @@ const vortexCenters = [
   { x: 0.35, y: 0.058, r: 0.070, spin: -0.68, zone: "A" },
   { x: 0.65, y: 0.065, r: 0.085, spin: 0.74, zone: "B" },
 ];
+const activeVortexCenters = vortexCenters.slice(0, Math.max(1, Math.min(vortexMarkCount, vortexCenters.length)));
 
 function clamp(v, lo, hi) {
   return Math.max(lo, Math.min(hi, v));
@@ -150,11 +177,13 @@ function rgba(rgb, a) {
 
 function resize() {
   const rect = canvas.getBoundingClientRect();
-  dpr = Math.max(1, Math.min(2.2, window.devicePixelRatio || 1));
+  const modeDpr = isPerformance ? 1.0 : Math.min(1.5, payload.maxDpr || (isCinematic ? 1.5 : 1.25));
+  dpr = Math.max(1, Math.min(modeDpr, window.devicePixelRatio || 1));
   W = Math.max(780, Math.floor(rect.width * dpr));
   H = Math.max(500, Math.floor(rect.height * dpr));
   canvas.width = W;
   canvas.height = H;
+  backgroundCache = null;
 }
 window.addEventListener("resize", resize);
 resize();
@@ -311,8 +340,9 @@ function velocityAt(x, y) {
     if (window > 0.55) vx -= 0.0060 * sep * band * Math.sin(tick * 0.08 + xb * 22);
   }
 
-  if (payload.showVortex) {
-    for (const vc of vortexCenters) {
+  if (payload.showVortex && payload.showLocalVortices !== false) {
+    const centers = runtimeScale < 0.75 ? activeVortexCenters.slice(0, 2) : activeVortexCenters;
+    for (const vc of centers) {
       const local = vc.zone ? zoneStrength(vc.zone) : 0;
       const power = (0.50 + 0.50 * alphaGain + 0.40 * local) * vortexGain;
       const dx = xb - vc.x;
@@ -345,7 +375,7 @@ function velocityAt(x, y) {
 function initParticles() {
   particles = [];
   const baseCount = Math.max(0, payload.particleCount);
-  const count = highQuality ? baseCount : Math.min(baseCount, 900);
+  const count = Math.floor(Math.min(baseCount, particleCapByMode) * runtimeScale);
   for (let i = 0; i < count; i++) {
     const nearFoil = Math.random() < 0.68;
     particles.push({
@@ -366,20 +396,27 @@ function resetParticle(p) {
   p.trail = [];
 }
 
-function drawPressureBackground() {
-  const bg = ctx.createLinearGradient(0, 0, W, H);
+function buildPressureBackground() {
+  backgroundCache = document.createElement("canvas");
+  backgroundCache.width = W;
+  backgroundCache.height = H;
+  backgroundCacheW = W;
+  backgroundCacheH = H;
+  const bctx = backgroundCache.getContext("2d", { alpha: false });
+  const bg = bctx.createLinearGradient(0, 0, W, H);
   bg.addColorStop(0.00, "#0B1420");
   bg.addColorStop(0.55, "#071018");
   bg.addColorStop(1.00, "#05080C");
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, W, H);
+  bctx.fillStyle = bg;
+  bctx.fillRect(0, 0, W, H);
 
-  if (!payload.showPressure) return;
-  const tiles = highQuality ? 52 : 34;
+  if (!payload.showPressure) return backgroundCache;
+  const tiles = isCinematic ? 42 : isBalanced ? 30 : 20;
+  const rows = Math.floor(tiles * 0.46);
   for (let ix = 0; ix < tiles; ix++) {
-    for (let iy = 0; iy < Math.floor(tiles * 0.46); iy++) {
+    for (let iy = 0; iy < rows; iy++) {
       const px = (ix + 0.5) / tiles * W;
-      const py = (iy + 0.5) / Math.floor(tiles * 0.46) * H;
+      const py = (iy + 0.5) / rows * H;
       const w = pxToWorld(px, py);
       const v = velocityAt(w.x, w.y).speed;
       const pressureCue = clamp(1.0 - v / (0.030 + 0.014 * speedGain), 0, 1);
@@ -387,18 +424,27 @@ function drawPressureBackground() {
       let color;
       if (pressureCue > 0.55) color = `rgba(255, 209, 102, ${0.020 + 0.045 * pressureCue})`;
       else color = `rgba(${Math.round(0 + 40 * lowCue)}, ${Math.round(115 + 110 * lowCue)}, ${Math.round(220 + 25 * lowCue)}, ${0.020 + 0.052 * lowCue})`;
-      ctx.fillStyle = color;
-      ctx.fillRect(px - W / tiles * 0.53, py - H / (tiles * 0.46) * 0.53, W / tiles * 1.08, H / (tiles * 0.46) * 1.08);
+      bctx.fillStyle = color;
+      bctx.fillRect(px - W / tiles * 0.53, py - H / rows * 0.53, W / tiles * 1.08, H / rows * 1.08);
     }
   }
 
+  if (isPerformance) return backgroundCache;
   const low = worldToPx(0.48, 0.080 + 0.045 * alphaGain);
-  const radial = ctx.createRadialGradient(low.x, low.y, 8 * dpr, low.x, low.y, W * (0.18 + 0.08 * cavitationLevel()));
+  const radial = bctx.createRadialGradient(low.x, low.y, 8 * dpr, low.x, low.y, W * (0.18 + 0.08 * cavitationLevel()));
   radial.addColorStop(0, `rgba(255, 48, 180, ${0.06 + 0.20 * cavitationLevel()})`);
   radial.addColorStop(0.55, `rgba(0, 183, 255, ${0.035 + 0.08 * cavitationLevel()})`);
   radial.addColorStop(1, "rgba(0, 183, 255, 0)");
-  ctx.fillStyle = radial;
-  ctx.fillRect(0, 0, W, H);
+  bctx.fillStyle = radial;
+  bctx.fillRect(0, 0, W, H);
+  return backgroundCache;
+}
+
+function drawPressureBackground() {
+  if (!backgroundCache || backgroundCacheW !== W || backgroundCacheH !== H) {
+    buildPressureBackground();
+  }
+  ctx.drawImage(backgroundCache, 0, 0);
 }
 
 function drawZones() {
@@ -441,9 +487,10 @@ function drawZones() {
 }
 
 function drawWakeHighlight() {
+  if (payload.showWakeHighlight === false || wakeGain <= 0.01) return;
   const C = zoneStrength("C");
-  const len = 0.28 + 0.18 * speedGain + 0.26 * wakeGain;
-  const spread = 0.060 + 0.046 * wakeGain + 0.035 * alphaGain;
+  const len = (0.22 + 0.14 * speedGain + 0.22 * wakeGain) * (isPerformance ? 0.78 : 1.0);
+  const spread = (0.046 + 0.036 * wakeGain + 0.028 * alphaGain) * (isPerformance ? 0.72 : 1.0);
   const coreY = 0.012 + 0.040 * alphaGain - 0.018 * C;
   const start = worldToPx(0.80, coreY);
   const end = worldToPx(0.80 + len, coreY + 0.030 * Math.sin(tick * 0.035));
@@ -455,14 +502,16 @@ function drawWakeHighlight() {
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   ctx.lineCap = "round";
-  for (let i = 0; i < (highQuality ? 10 : 6); i++) {
+  const bands = isCinematic ? 9 : isBalanced ? 5 : 3;
+  for (let i = 0; i < bands; i++) {
     const offset = (i - 4.5) * spread / 5;
     ctx.strokeStyle = grad;
     ctx.lineWidth = (8 + i * 4 + 18 * wakeGain) * dpr;
     ctx.globalAlpha = 0.10 + 0.035 * i;
     ctx.beginPath();
-    for (let k = 0; k <= 42; k++) {
-      const t = k / 42;
+    const steps = isCinematic ? 34 : 22;
+    for (let k = 0; k <= steps; k++) {
+      const t = k / steps;
       const x = 0.82 + len * t;
       const y = coreY + offset * Math.exp(-t * 1.5) + 0.018 * wakeGain * Math.sin(tick * 0.045 + t * 12 + i);
       const p = worldToPx(x, y);
@@ -477,7 +526,7 @@ function drawWakeHighlight() {
 function drawFoil() {
   ctx.save();
   ctx.shadowColor = "rgba(0, 183, 255, 0.38)";
-  ctx.shadowBlur = 18 * dpr;
+  ctx.shadowBlur = shadowLevel === 0 ? 0 : (shadowLevel === 1 ? 7 : 18) * dpr;
   ctx.beginPath();
   for (let i = 0; i < payload.foilOutline.length; i++) {
     const p = worldToPx(payload.foilOutline[i].x, payload.foilOutline[i].y);
@@ -547,7 +596,7 @@ function drawVanes(now) {
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       ctx.shadowColor = rgba(rgb, 0.65);
-      ctx.shadowBlur = enabled ? 16 * dpr : 5 * dpr;
+      ctx.shadowBlur = shadowLevel === 0 ? 0 : (enabled ? (shadowLevel === 1 ? 7 : 16) : 3) * dpr;
       ctx.strokeStyle = rgba(rgb, enabled ? 0.95 : 0.40);
       ctx.fillStyle = rgba(rgb, enabled ? 0.40 : 0.16);
       ctx.lineWidth = (kind === "flap" ? 5.2 : 3.6) * dpr;
@@ -592,11 +641,13 @@ function drawVanes(now) {
 }
 
 function drawVortexMarks() {
-  if (!payload.showVortex) return;
+  if (!payload.showVortex || payload.showLocalVortices === false) return;
   const sep = separationLevel();
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
-  for (const vc of vortexCenters) {
+  const centers = runtimeScale < 0.75 ? activeVortexCenters.slice(0, 1) : activeVortexCenters;
+  const ringCount = isCinematic ? 3 : isBalanced ? 2 : 1;
+  for (const vc of centers) {
     const local = vc.zone ? zoneStrength(vc.zone) : 0;
     const intensity = clamp((0.45 + 0.45 * alphaGain + 0.35 * local + 0.20 * sep) * vortexGain, 0, 1.7);
     if (intensity <= 0.02) continue;
@@ -605,7 +656,7 @@ function drawVortexMarks() {
     const rgb = zoneColor(vc.zone || "C");
     ctx.strokeStyle = rgba(rgb, 0.12 + 0.26 * intensity);
     ctx.lineWidth = (1.2 + 2.0 * intensity) * dpr;
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < ringCount; i++) {
       const phase = tick * 0.025 * vc.spin + i * 2.1;
       ctx.beginPath();
       ctx.arc(p.x, p.y, r * (0.56 + 0.25 * i), phase, phase + Math.PI * (1.15 + 0.22 * i));
@@ -617,12 +668,12 @@ function drawVortexMarks() {
 
 function drawSeparationZone() {
   const sep = separationLevel();
-  if (!payload.showSeparation || sep <= 0.02) return;
+  if (!payload.showSeparation || sep <= (isPerformance ? 0.45 : 0.06)) return;
   const start = lerp(0.78, 0.48, clamp(sep, 0, 1));
   const end = 1.02 + 0.14 * sep;
   const pointsTop = [];
   const pointsBottom = [];
-  const steps = highQuality ? 28 : 18;
+  const steps = isCinematic ? 24 : isBalanced ? 14 : 8;
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
     const x = lerp(start, end, t);
@@ -640,9 +691,10 @@ function drawSeparationZone() {
   pointsTop.slice().reverse().forEach(p => ctx.lineTo(p.x, p.y));
   ctx.closePath();
   const grad = ctx.createLinearGradient(pointsBottom[0].x, pointsBottom[0].y, pointsTop[pointsTop.length - 1].x, pointsTop[pointsTop.length - 1].y);
-  grad.addColorStop(0, `rgba(255, 209, 102, ${0.05 + 0.12 * sep})`);
-  grad.addColorStop(0.45, `rgba(255, 140, 58, ${0.08 + 0.16 * sep})`);
-  grad.addColorStop(1, `rgba(255, 48, 77, ${0.05 + 0.12 * sep})`);
+  const alphaScale = isPerformance ? 0.45 : isBalanced ? 0.70 : 1.0;
+  grad.addColorStop(0, `rgba(255, 209, 102, ${(0.05 + 0.12 * sep) * alphaScale})`);
+  grad.addColorStop(0.45, `rgba(255, 140, 58, ${(0.08 + 0.16 * sep) * alphaScale})`);
+  grad.addColorStop(1, `rgba(255, 48, 77, ${(0.05 + 0.12 * sep) * alphaScale})`);
   ctx.fillStyle = grad;
   ctx.fill();
   ctx.strokeStyle = `rgba(255, 236, 170, ${0.22 + 0.34 * sep})`;
@@ -654,12 +706,13 @@ function drawSeparationZone() {
 }
 
 function updateBubbles(dt) {
-  if (!payload.showCavitationBubbles) {
+  const bubbleCap = Math.floor(bubbleCapByMode * runtimeScale);
+  if (!payload.showCavitationBubbles || bubbleCap <= 0) {
     bubbles = [];
     return;
   }
   const cav = cavitationLevel();
-  const spawnRate = (highQuality ? 0.60 : 0.36) * cav * emitGain;
+  const spawnRate = (isCinematic ? 0.34 : 0.14) * cav * emitGain * runtimeScale;
   if (Math.random() < spawnRate) {
     const cluster = Math.random();
     const x = cluster < 0.58 ? lerp(0.25, 0.62, Math.random()) : lerp(0.60, 0.96, Math.random());
@@ -675,8 +728,7 @@ function updateBubbles(dt) {
       wobble: Math.random() * Math.PI * 2,
     });
   }
-  const cap = highQuality ? 110 : 58;
-  if (bubbles.length > cap) bubbles.splice(0, bubbles.length - cap);
+  if (bubbles.length > bubbleCap) bubbles.splice(0, bubbles.length - bubbleCap);
   for (const b of bubbles) {
     b.life += dt;
     b.x += b.drift * dt;
@@ -738,7 +790,7 @@ function drawParticles() {
     const pp = worldToPx(p.x, p.y);
     ctx.fillStyle = speedColor(v.speed, 0.98);
     ctx.shadowColor = speedColor(v.speed, 0.65);
-    ctx.shadowBlur = (highQuality ? 7 : 4) * dpr;
+    ctx.shadowBlur = shadowLevel === 0 ? 0 : (shadowLevel === 1 ? 3 : 7) * dpr;
     ctx.beginPath();
     ctx.arc(pp.x, pp.y, Math.max(1.6, W * 0.0018), 0, Math.PI * 2);
     ctx.fill();
@@ -752,7 +804,7 @@ function drawFlowArrows() {
   ctx.lineWidth = 1.1 * dpr;
   ctx.strokeStyle = "rgba(214, 222, 232, 0.30)";
   ctx.fillStyle = "rgba(214, 222, 232, 0.48)";
-  const rows = highQuality ? 7 : 5;
+  const rows = isCinematic ? 7 : isBalanced ? 5 : 3;
   for (let row = 0; row < rows; row++) {
     const y = lerp(-0.30, 0.30, row / Math.max(1, rows - 1));
     for (let i = 0; i < 5; i++) {
@@ -774,13 +826,48 @@ function drawFlowArrows() {
   ctx.restore();
 }
 
+function trimRuntimeLoad() {
+  const target = Math.max(80, Math.floor(Math.min(payload.particleCount || 0, particleCapByMode) * runtimeScale));
+  if (particles.length > target) particles.splice(target);
+  for (const p of particles) {
+    while (p.trail.length > trailLimit) p.trail.shift();
+  }
+  const bubbleCap = Math.floor(bubbleCapByMode * runtimeScale);
+  if (bubbles.length > bubbleCap) bubbles.splice(0, bubbles.length - bubbleCap);
+}
+
+function updateFps(dt) {
+  const fps = 1 / Math.max(dt, 0.001);
+  frameSamples.push(fps);
+  if (frameSamples.length > 30) frameSamples.shift();
+  if (frameSamples.length >= 10) {
+    fpsEstimate = frameSamples.reduce((sum, item) => sum + item, 0) / frameSamples.length;
+  }
+  if (payload.autoDegradeEnabled !== false && frameSamples.length >= 30 && fpsEstimate < 25 && runtimeScale > 0.45) {
+    runtimeScale = Math.max(0.45, runtimeScale * 0.80);
+    autoDegraded = true;
+    trimRuntimeLoad();
+    frameSamples = [];
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  visible = document.visibilityState !== "hidden";
+});
+
+const observer = new IntersectionObserver(entries => {
+  visible = entries.some(entry => entry.isIntersecting) && document.visibilityState !== "hidden";
+}, { threshold: 0.05 });
+observer.observe(canvas);
+
 function updateHud() {
   const sep = separationLevel();
   const cav = cavitationLevel();
   hud.innerHTML =
     `<b>Concept flow viewport</b><br>` +
     `U=${payload.velocity.toFixed(1)} m/s&nbsp;&nbsp; alpha=${payload.alphaDeg.toFixed(1)}°<br>` +
-    `particles=${particles.length}&nbsp;&nbsp; trail=${trailLimit}&nbsp;&nbsp; ${payload.qualityMode}<br>` +
+    `fps=${fpsEstimate.toFixed(0)}&nbsp;&nbsp; particles=${particles.length}&nbsp;&nbsp; trail=${trailLimit}&nbsp;&nbsp; ${modeName}<br>` +
+    `auto degrade=${autoDegraded ? "on" : "off"}&nbsp;&nbsp; DPR=${dpr.toFixed(1)}<br>` +
     `wake=${wakeGain.toFixed(2)} vortex=${vortexGain.toFixed(2)} sep=${sep.toFixed(2)} cav=${cav.toFixed(2)}<br>` +
     `<span class="zone-tag" style="background:#00B7FF">A</span>${Math.round(zoneAngle("A"))}° ` +
     `<span class="zone-tag" style="background:#FFD166">B</span>${Math.round(zoneAngle("B"))}° ` +
@@ -790,6 +877,11 @@ function updateHud() {
 function frame(now) {
   const dt = Math.min(0.05, (now - lastTime) / 1000 || 0.016);
   lastTime = now;
+  if (!visible) {
+    requestAnimationFrame(frame);
+    return;
+  }
+  updateFps(dt);
   drawPressureBackground();
   drawZones();
   drawFlowArrows();

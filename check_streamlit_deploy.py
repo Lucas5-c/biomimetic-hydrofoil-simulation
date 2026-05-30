@@ -195,7 +195,7 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
     report.append("## Canvas Payload Visual Parameters")
     try:
         from components.flow_canvas import canvas_payload as component_canvas_payload
-        from core.params import ZONE_UI, merge_visual_defaults
+        from core.params import QUALITY_MODE_LIMITS, ZONE_UI, apply_quality_limits, merge_visual_defaults
 
         component_payload = component_canvas_payload(
             velocity=8.0,
@@ -224,6 +224,55 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
         )
         assert component_payload["show_separation"] is True
         assert component_payload["separation_strength"] == 0.8
+        if set(QUALITY_MODE_LIMITS) != {"流畅", "平衡", "炸裂"}:
+            raise RuntimeError("quality modes must be 流畅 / 平衡 / 炸裂")
+
+        mode_expectations = {
+            "流畅": (600, 4),
+            "平衡": (900, 7),
+            "炸裂": (1800, 12),
+        }
+        for mode, (count, max_trail) in mode_expectations.items():
+            visual_mode = apply_quality_limits(
+                {
+                    "quality_mode": mode,
+                    "particle_count": count,
+                    "trail_length": 12,
+                    "show_cavitation_bubbles": mode != "流畅",
+                    "show_separation": mode == "炸裂",
+                    "show_separation_zone": mode == "炸裂",
+                    "show_local_vortices": True,
+                    "show_speed_colormap": True,
+                    "show_wake_highlight": True,
+                    "show_blade_animation": True,
+                },
+                fast_preview=False,
+            )
+            mode_payload = component_canvas_payload(
+                velocity=8.0,
+                angle=4.0,
+                animation_speed=1.0,
+                particle_count=visual_mode.get("particle_count", count),
+                trail_length=visual_mode.get("trail_length", max_trail),
+                emission_rate=visual_mode.get("emission_strength", 0.8),
+                attachment_strength=visual_mode.get("attachment_strength", 0.78),
+                wake_strength=visual_mode.get("wake_strength", 0.8),
+                vortex_strength=visual_mode.get("vortex_strength", 0.5),
+                pressure_background=visual_mode.get("pressure_background", True),
+                show_particles=True,
+                quality_mode=visual_mode["quality_mode"],
+                mode_max_particles=visual_mode["mode_max_particles"],
+                mode_max_trail=visual_mode["mode_max_trail"],
+                bubble_cap=visual_mode["bubble_cap"],
+                vortex_mark_count=visual_mode["vortex_mark_count"],
+                shadow_level=visual_mode["shadow_level"],
+                max_dpr=visual_mode["max_dpr"],
+                auto_degrade_enabled=visual_mode["auto_degrade_enabled"],
+            )
+            if mode_payload["qualityMode"] != mode:
+                raise RuntimeError(f"quality mode payload mismatch for {mode}")
+            if mode_payload["trailLength"] > max_trail:
+                raise RuntimeError(f"trail length not capped for {mode}")
 
         zones = {
             zone: {
@@ -235,7 +284,8 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
             }
             for zone, spec in ZONE_UI.items()
         }
-        visual = merge_visual_defaults(
+        visual = apply_quality_limits(
+            merge_visual_defaults(
             {
                 "separation_strength": 0.8,
                 "cavitation_strength": 0.7,
@@ -250,13 +300,15 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
                 "show_speed_colormap": True,
                 "show_local_vortices": True,
             }
+            ),
+            fast_preview=False,
         )
         payload = component_canvas_payload(
             velocity=8.0,
             alpha_deg=4.0,
             rho=1000.0,
             cavitation_threshold_kpa=-30.0,
-            particle_count=visual.get("particle_count", 850),
+            particle_count=visual.get("particle_count", 600),
             animation_speed=visual.get("animation_speed", 1.0),
             grid_density="medium",
             zones=zones,
@@ -266,19 +318,19 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
             show_vanes=visual.get("show_vanes", visual.get("show_blade_animation", True)),
             playing=visual.get("playing", True),
             show_zone_labels=visual.get("show_zone_labels", True),
-            trail_length=visual.get("trail_length", 20),
-            emission_strength=visual.get("emission_strength", 0.7),
+            trail_length=visual.get("trail_length", 3),
+            emission_strength=visual.get("emission_strength", 0.8),
             attachment_strength=visual.get("attachment_strength", 0.78),
             wake_strength=visual.get("wake_strength", visual.get("wake_highlight_strength", 1.0)),
-            vortex_strength=visual.get("vortex_strength", visual.get("vortex_animation_strength", 0.8)),
-            separation_strength=visual.get("separation_strength", 0.8),
-            cavitation_strength=visual.get("cavitation_strength", 0.7),
+            vortex_strength=visual.get("vortex_strength", visual.get("vortex_animation_strength", 0.5)),
+            separation_strength=visual.get("separation_strength", 0.4),
+            cavitation_strength=visual.get("cavitation_strength", 0.3),
             vane_deploy_angle=visual.get("vane_deploy_angle", 24.0),
-            quality_mode=visual.get("quality_mode", "high_quality"),
-            show_cavitation_bubbles=visual.get("show_cavitation_bubbles", True),
-            show_separation=visual.get("show_separation", visual.get("show_separation_zone", True)),
-            show_separation_zone=visual.get("show_separation_zone", True),
-            show_cavitation=visual.get("show_cavitation_bubbles", True),
+            quality_mode=visual.get("quality_mode", "流畅"),
+            show_cavitation_bubbles=visual.get("show_cavitation_bubbles", False),
+            show_separation=visual.get("show_separation", visual.get("show_separation_zone", False)),
+            show_separation_zone=visual.get("show_separation_zone", False),
+            show_cavitation=visual.get("show_cavitation_bubbles", False),
             show_wake_highlight=visual.get("show_wake_highlight", True),
             wake_highlight_strength=visual.get("wake_highlight_strength", 1.0),
             show_speed_colormap=visual.get("show_speed_colormap", True),
@@ -287,6 +339,14 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
             vortex_animation_strength=visual.get("vortex_animation_strength", 0.8),
             show_blade_animation=visual.get("show_blade_animation", True),
             blade_animation_strength=visual.get("blade_animation_strength", 1.0),
+            target_fps=visual.get("target_fps", 60),
+            mode_max_particles=visual.get("mode_max_particles", 900),
+            mode_max_trail=visual.get("mode_max_trail", 4),
+            bubble_cap=visual.get("bubble_cap", 0),
+            vortex_mark_count=visual.get("vortex_mark_count", 2),
+            shadow_level=visual.get("shadow_level", 0),
+            max_dpr=visual.get("max_dpr", 1.0),
+            auto_degrade_enabled=visual.get("auto_degrade_enabled", True),
         )
 
         required_keys = [
@@ -303,6 +363,14 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
             "vortexAnimationStrength",
             "showBladeAnimation",
             "bladeAnimationStrength",
+            "targetFps",
+            "modeMaxParticles",
+            "modeMaxTrail",
+            "bubbleCap",
+            "vortexMarkCount",
+            "shadowLevel",
+            "maxDpr",
+            "autoDegradeEnabled",
         ]
         missing = [key for key in required_keys if key not in payload]
         if missing:
