@@ -324,34 +324,34 @@ def create_module_surface_curve_figure(result: dict, params: dict[str, Any]) -> 
 
 
 def render_canvas_module(result: dict, params: dict[str, Any]) -> None:
-    visual = params["visual"]
+    visual = params.get("visual", {})
     module_title("动态水流粒子", "Canvas 实时渲染尾迹辉光、速度色带、局部涡旋、叶片展开、分离区与空化气泡")
     payload = canvas_payload(
         velocity=params["flow"]["velocity"],
         alpha_deg=params["flow"]["alpha_deg"],
         rho=params["flow"]["rho"],
         cavitation_threshold_kpa=params["flow"]["cavitation_threshold_kpa"],
-        particle_count=visual["particle_count"] if visual["show_particles"] else 0,
-        animation_speed=visual["animation_speed"],
+        particle_count=visual.get("particle_count", 850) if visual.get("show_particles", True) else 0,
+        animation_speed=visual.get("animation_speed", 1.0),
         grid_density=params["flow"]["grid_density"],
         zones=params["zones"],
-        show_pressure=visual["show_pressure"],
-        show_particles=visual["show_particles"],
-        show_vortex=visual["show_vortex"],
-        show_vanes=visual["show_vanes"],
-        playing=visual["playing"],
-        show_zone_labels=visual["show_zone_labels"],
-        trail_length=visual["trail_length"],
-        emission_strength=visual["emission_strength"],
-        attachment_strength=visual["attachment_strength"],
-        wake_strength=visual["wake_strength"],
-        vortex_strength=visual["vortex_strength"],
-        separation_strength=visual["separation_strength"],
-        cavitation_strength=visual["cavitation_strength"],
-        vane_deploy_angle=visual["vane_deploy_angle"],
-        quality_mode=visual["quality_mode"],
-        show_cavitation_bubbles=visual["show_cavitation_bubbles"],
-        show_separation=visual["show_separation"],
+        show_pressure=visual.get("show_pressure", True),
+        show_particles=visual.get("show_particles", True),
+        show_vortex=visual.get("show_vortex", visual.get("show_local_vortices", True)),
+        show_vanes=visual.get("show_vanes", visual.get("show_blade_animation", True)),
+        playing=visual.get("playing", True),
+        show_zone_labels=visual.get("show_zone_labels", True),
+        trail_length=visual.get("trail_length", 20),
+        emission_strength=visual.get("emission_strength", 0.70),
+        attachment_strength=visual.get("attachment_strength", 0.78),
+        wake_strength=visual.get("wake_strength", visual.get("wake_highlight_strength", 1.0)),
+        vortex_strength=visual.get("vortex_strength", visual.get("vortex_animation_strength", 0.8)),
+        separation_strength=visual.get("separation_strength", 0.8),
+        cavitation_strength=visual.get("cavitation_strength", 0.7),
+        vane_deploy_angle=visual.get("vane_deploy_angle", 24.0),
+        quality_mode=visual.get("quality_mode", "高画质"),
+        show_cavitation_bubbles=visual.get("show_cavitation_bubbles", True),
+        show_separation=visual.get("show_separation", visual.get("show_separation_zone", True)),
     )
     render_flow_canvas(payload, height=660)
     render_canvas_exports(result, params)

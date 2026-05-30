@@ -43,6 +43,37 @@ ZONE_UI = {
     },
 }
 
+VISUAL_DEFAULTS: dict[str, Any] = {
+    "particle_count": 850,
+    "animation_speed": 1.0,
+    "trail_length": 20,
+    "emission_strength": 0.70,
+    "attachment_strength": 0.78,
+    "wake_strength": 0.72,
+    "vortex_strength": 0.70,
+    "separation_strength": 0.8,
+    "cavitation_strength": 0.7,
+    "vane_deploy_angle": 24.0,
+    "quality_mode": "高画质",
+    "show_pressure": True,
+    "show_particles": True,
+    "show_vortex": True,
+    "show_vanes": True,
+    "show_cavitation_bubbles": True,
+    "show_separation": True,
+    "show_zone_labels": True,
+    "playing": True,
+    "wake_highlight_strength": 1.0,
+    "speed_colormap_strength": 1.0,
+    "vortex_animation_strength": 0.8,
+    "blade_animation_strength": 1.0,
+    "show_separation_zone": True,
+    "show_blade_animation": True,
+    "show_wake_highlight": True,
+    "show_speed_colormap": True,
+    "show_local_vortices": True,
+}
+
 DEFAULT_STATE: dict[str, Any] = {
     "active_module": MODULES[0],
     "U": 8.0,
@@ -60,8 +91,8 @@ DEFAULT_STATE: dict[str, Any] = {
     "attachment_strength": 0.78,
     "wake_strength": 0.72,
     "vortex_strength": 0.70,
-    "separation_strength": 0.70,
-    "cavitation_strength": 0.62,
+    "separation_strength": 0.8,
+    "cavitation_strength": 0.7,
     "vane_deploy_angle": 24.0,
     "quality_mode": "高画质",
     "show_pressure": True,
@@ -69,6 +100,15 @@ DEFAULT_STATE: dict[str, Any] = {
     "show_vanes": True,
     "show_cavitation_bubbles": True,
     "show_separation": True,
+    "wake_highlight_strength": 1.0,
+    "speed_colormap_strength": 1.0,
+    "vortex_animation_strength": 0.8,
+    "blade_animation_strength": 1.0,
+    "show_separation_zone": True,
+    "show_blade_animation": True,
+    "show_wake_highlight": True,
+    "show_speed_colormap": True,
+    "show_local_vortices": True,
     "show_zone_labels": True,
     "playing": True,
     "contour_levels": 34,
@@ -224,6 +264,33 @@ def tuple_to_zones(zones_tuple: tuple) -> dict[str, dict[str, Any]]:
     }
 
 
+def merge_visual_defaults(visual: dict[str, Any] | None) -> dict[str, Any]:
+    merged = deepcopy(VISUAL_DEFAULTS)
+    provided = dict(visual or {})
+    merged.update(provided)
+
+    if "wake_highlight_strength" not in provided:
+        merged["wake_highlight_strength"] = merged.get("wake_strength", VISUAL_DEFAULTS["wake_highlight_strength"])
+    if "vortex_animation_strength" not in provided:
+        merged["vortex_animation_strength"] = merged.get("vortex_strength", VISUAL_DEFAULTS["vortex_animation_strength"])
+    if "blade_animation_strength" not in provided:
+        merged["blade_animation_strength"] = 1.0 if merged.get("show_vanes", True) else 0.0
+    if "show_separation_zone" not in provided:
+        merged["show_separation_zone"] = merged.get("show_separation", VISUAL_DEFAULTS["show_separation_zone"])
+    if "show_blade_animation" not in provided:
+        merged["show_blade_animation"] = merged.get("show_vanes", VISUAL_DEFAULTS["show_blade_animation"])
+    if "show_local_vortices" not in provided:
+        merged["show_local_vortices"] = merged.get("show_vortex", VISUAL_DEFAULTS["show_local_vortices"])
+    return merged
+
+
+def _state_value(st_module, key: str) -> Any:
+    if key not in st_module.session_state:
+        fallback = DEFAULT_STATE.get(key, VISUAL_DEFAULTS.get(key))
+        st_module.session_state[key] = deepcopy(fallback)
+    return st_module.session_state[key]
+
+
 def build_current_params(st_module) -> dict[str, Any]:
     zones = current_zone_settings(st_module)
     return {
@@ -237,26 +304,35 @@ def build_current_params(st_module) -> dict[str, Any]:
             "fast_preview": bool(st_module.session_state["fast_preview"]),
         },
         "zones": zones,
-        "visual": {
-            "particle_count": int(st_module.session_state["particle_count"]),
-            "animation_speed": float(st_module.session_state["animation_speed"]),
-            "trail_length": int(st_module.session_state["trail_length"]),
-            "emission_strength": float(st_module.session_state["emission_strength"]),
-            "attachment_strength": float(st_module.session_state["attachment_strength"]),
-            "wake_strength": float(st_module.session_state["wake_strength"]),
-            "vortex_strength": float(st_module.session_state["vortex_strength"]),
-            "separation_strength": float(st_module.session_state["separation_strength"]),
-            "cavitation_strength": float(st_module.session_state["cavitation_strength"]),
-            "vane_deploy_angle": float(st_module.session_state["vane_deploy_angle"]),
-            "quality_mode": str(st_module.session_state["quality_mode"]),
-            "show_pressure": bool(st_module.session_state["show_pressure"]),
-            "show_particles": bool(st_module.session_state["show_particles"]),
-            "show_vortex": bool(st_module.session_state["show_vortex"]),
-            "show_vanes": bool(st_module.session_state["show_vanes"]),
-            "show_cavitation_bubbles": bool(st_module.session_state["show_cavitation_bubbles"]),
-            "show_separation": bool(st_module.session_state["show_separation"]),
-            "show_zone_labels": bool(st_module.session_state["show_zone_labels"]),
-            "playing": bool(st_module.session_state["playing"]),
+        "visual": merge_visual_defaults({
+            "particle_count": int(_state_value(st_module, "particle_count")),
+            "animation_speed": float(_state_value(st_module, "animation_speed")),
+            "trail_length": int(_state_value(st_module, "trail_length")),
+            "emission_strength": float(_state_value(st_module, "emission_strength")),
+            "attachment_strength": float(_state_value(st_module, "attachment_strength")),
+            "wake_strength": float(_state_value(st_module, "wake_strength")),
+            "vortex_strength": float(_state_value(st_module, "vortex_strength")),
+            "separation_strength": float(_state_value(st_module, "separation_strength")),
+            "cavitation_strength": float(_state_value(st_module, "cavitation_strength")),
+            "vane_deploy_angle": float(_state_value(st_module, "vane_deploy_angle")),
+            "quality_mode": str(_state_value(st_module, "quality_mode")),
+            "show_pressure": bool(_state_value(st_module, "show_pressure")),
+            "show_particles": bool(_state_value(st_module, "show_particles")),
+            "show_vortex": bool(_state_value(st_module, "show_vortex")),
+            "show_vanes": bool(_state_value(st_module, "show_vanes")),
+            "show_cavitation_bubbles": bool(_state_value(st_module, "show_cavitation_bubbles")),
+            "show_separation": bool(_state_value(st_module, "show_separation")),
+            "show_zone_labels": bool(_state_value(st_module, "show_zone_labels")),
+            "playing": bool(_state_value(st_module, "playing")),
+            "wake_highlight_strength": float(_state_value(st_module, "wake_highlight_strength")),
+            "speed_colormap_strength": float(_state_value(st_module, "speed_colormap_strength")),
+            "vortex_animation_strength": float(_state_value(st_module, "vortex_animation_strength")),
+            "blade_animation_strength": float(_state_value(st_module, "blade_animation_strength")),
+            "show_separation_zone": bool(_state_value(st_module, "show_separation_zone")),
+            "show_blade_animation": bool(_state_value(st_module, "show_blade_animation")),
+            "show_wake_highlight": bool(_state_value(st_module, "show_wake_highlight")),
+            "show_speed_colormap": bool(_state_value(st_module, "show_speed_colormap")),
+            "show_local_vortices": bool(_state_value(st_module, "show_local_vortices")),
             "contour_levels": int(st_module.session_state["contour_levels"]),
             "pressure_auto_range": bool(st_module.session_state["pressure_auto_range"]),
             "pressure_min": float(st_module.session_state["pressure_min"]),
@@ -279,7 +355,7 @@ def build_current_params(st_module) -> dict[str, Any]:
             "curve_mark_zones": bool(st_module.session_state["curve_mark_zones"]),
             "curve_x_axis": str(st_module.session_state["curve_x_axis"]),
             "curve_y_unit": str(st_module.session_state["curve_y_unit"]),
-        },
+        }),
         "export": {
             "scan_target": str(st_module.session_state["scan_target"]),
             "scan_start": float(st_module.session_state["scan_start"]),
@@ -304,6 +380,7 @@ def build_current_params(st_module) -> dict[str, Any]:
 
 def solver_kwargs(params: dict[str, Any], density_override: str | None = None) -> dict[str, Any]:
     flow = params["flow"]
+    visual = merge_visual_defaults(params.get("visual"))
     return {
         "velocity": flow["velocity"],
         "alpha_deg": flow["alpha_deg"],
@@ -311,22 +388,27 @@ def solver_kwargs(params: dict[str, Any], density_override: str | None = None) -
         "cavitation_threshold_kpa": flow["cavitation_threshold_kpa"],
         "grid_density": density_override or flow["grid_density"],
         "zones": params["zones"],
-        "show_vortex": params["visual"]["show_vortex"],
+        "show_vortex": visual.get("show_vortex", True),
     }
 
 
 def exportable_extra(params: dict[str, Any]) -> dict[str, Any]:
+    visual = merge_visual_defaults(params.get("visual"))
     return {
         "module": params["module"],
-        "particle_count": params["visual"]["particle_count"],
-        "animation_speed": params["visual"]["animation_speed"],
-        "trail_length": params["visual"]["trail_length"],
-        "emission_strength": params["visual"]["emission_strength"],
-        "attachment_strength": params["visual"]["attachment_strength"],
-        "wake_strength": params["visual"]["wake_strength"],
-        "vortex_strength": params["visual"]["vortex_strength"],
-        "separation_strength": params["visual"]["separation_strength"],
-        "cavitation_strength": params["visual"]["cavitation_strength"],
-        "vane_deploy_angle": params["visual"]["vane_deploy_angle"],
-        "quality_mode": params["visual"]["quality_mode"],
+        "particle_count": visual.get("particle_count", 850),
+        "animation_speed": visual.get("animation_speed", 1.0),
+        "trail_length": visual.get("trail_length", 20),
+        "emission_strength": visual.get("emission_strength", 0.70),
+        "attachment_strength": visual.get("attachment_strength", 0.78),
+        "wake_strength": visual.get("wake_strength", 0.72),
+        "vortex_strength": visual.get("vortex_strength", 0.70),
+        "separation_strength": visual.get("separation_strength", 0.8),
+        "cavitation_strength": visual.get("cavitation_strength", 0.7),
+        "vane_deploy_angle": visual.get("vane_deploy_angle", 24.0),
+        "quality_mode": visual.get("quality_mode", "高画质"),
+        "wake_highlight_strength": visual.get("wake_highlight_strength", 1.0),
+        "speed_colormap_strength": visual.get("speed_colormap_strength", 1.0),
+        "vortex_animation_strength": visual.get("vortex_animation_strength", 0.8),
+        "blade_animation_strength": visual.get("blade_animation_strength", 1.0),
     }

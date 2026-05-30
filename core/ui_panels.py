@@ -227,9 +227,9 @@ def render_right_panel(result: dict, params: dict[str, Any], display_density: st
         _data_card("粒子速度倍率", _format_float(visual["animation_speed"]))
         _data_card("尾迹强度", _format_float(visual["wake_strength"]))
         _data_card("涡旋强度", _format_float(visual["vortex_strength"]))
-        _data_card("分离区强度", _format_float(visual["separation_strength"]))
-        _data_card("空化强度", _format_float(visual["cavitation_strength"]))
-        _data_card("渲染模式", visual["quality_mode"])
+        _data_card("分离区强度", _format_float(visual.get("separation_strength", 0.8)))
+        _data_card("空化强度", _format_float(visual.get("cavitation_strength", 0.7)))
+        _data_card("渲染模式", visual.get("quality_mode", "高画质"))
         _data_card("目标帧率", "60 fps")
     elif module == "压力云图":
         p = result["pressure_kpa"]
