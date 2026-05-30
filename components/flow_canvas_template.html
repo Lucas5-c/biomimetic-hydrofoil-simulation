@@ -14,27 +14,66 @@
       position: relative;
       width: 100%;
       height: 650px;
-      border: 1px solid #26384B;
+      border: 1px solid rgba(0, 183, 255, 0.32);
       border-radius: 8px;
       overflow: hidden;
       background:
-        radial-gradient(circle at 32% 18%, rgba(0, 183, 255, 0.16), transparent 28%),
-        radial-gradient(circle at 68% 60%, rgba(255, 209, 102, 0.10), transparent 30%),
-        linear-gradient(180deg, #111A25 0%, #080D13 100%);
+        linear-gradient(180deg, #0D1723 0%, #070B11 100%);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 255, 255, 0.035),
+        inset 0 0 70px rgba(0, 183, 255, 0.10);
     }
-    canvas { width: 100%; height: 100%; display: block; }
-    #hud {
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    #hud, #legend {
       position: absolute;
+      pointer-events: none;
+      color: #D6DEE8;
+      background: rgba(7, 12, 18, 0.68);
+      border: 1px solid rgba(0, 183, 255, 0.22);
+      border-radius: 7px;
+      backdrop-filter: blur(8px);
+    }
+    #hud {
       left: 14px;
       top: 12px;
-      color: #D6DEE8;
+      min-width: 218px;
+      padding: 9px 11px;
       font-size: 12px;
       line-height: 1.55;
-      background: rgba(14, 17, 23, 0.70);
-      border: 1px solid rgba(38, 56, 75, 0.85);
-      border-radius: 6px;
-      padding: 8px 10px;
-      pointer-events: none;
+    }
+    #legend {
+      right: 14px;
+      bottom: 12px;
+      width: 250px;
+      padding: 8px 10px 9px 10px;
+      font-size: 11px;
+    }
+    .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+    }
+    .legend-bar {
+      height: 8px;
+      flex: 1;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #153A8A, #00B7FF, #57CC99, #FFD166, #FF8C3A, #FF304D);
+      box-shadow: 0 0 14px rgba(0, 183, 255, 0.35);
+    }
+    .zone-tag {
+      display: inline-block;
+      min-width: 18px;
+      padding: 1px 5px;
+      border-radius: 4px;
+      margin-right: 4px;
+      color: #081018;
+      font-weight: 800;
+      text-align: center;
     }
   </style>
 </head>
@@ -42,30 +81,78 @@
 <div id="wrap">
   <canvas id="flow"></canvas>
   <div id="hud"></div>
+  <div id="legend">
+    <div>局部速度色带</div>
+    <div class="legend-row"><span>低</span><div class="legend-bar"></div><span>高</span></div>
+  </div>
 </div>
 <script type="application/json" id="flow-data">__FLOW_PAYLOAD__</script>
 <script>
 const payload = JSON.parse(document.getElementById("flow-data").textContent);
 const canvas = document.getElementById("flow");
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d", { alpha: false });
 const hud = document.getElementById("hud");
+
 let W = 1;
 let H = 1;
-let particles = [];
+let dpr = 1;
 let tick = 0;
+let lastTime = performance.now();
+const animationStart = performance.now();
+let particles = [];
+let bubbles = [];
 
-const speedGain = Math.max(0.35, payload.velocity / 8.0);
-const alphaGain = Math.max(0, payload.alphaDeg) / 12.0;
-const trailLimit = Math.max(6, Math.min(58, payload.trailLength + Math.round(speedGain * 4)));
+const highQuality = payload.qualityMode !== "高性能";
+const speedGain = clamp(payload.velocity / 8.0, 0.25, 2.7);
+const alphaPos = Math.max(0, payload.alphaDeg);
+const alphaGain = clamp(alphaPos / 12.0, 0, 1.4);
 const wakeGain = Math.max(0, payload.wakeStrength || 0);
 const vortexGain = Math.max(0, payload.vortexStrength || 0);
-const attachGain = Math.max(0.1, payload.attachmentStrength || 0.8);
-const emitGain = Math.max(0.2, payload.emissionStrength || 0.7);
+const attachGain = clamp(payload.attachmentStrength || 0.8, 0.1, 1.6);
+const emitGain = clamp(payload.emissionStrength || 0.7, 0.15, 1.8);
+const separationGain = Math.max(0, payload.separationStrength || 0);
+const cavitationGain = Math.max(0, payload.cavitationStrength || 0);
+const trailLimit = Math.max(6, Math.min(highQuality ? 78 : 44, payload.trailLength + Math.round(speedGain * 8)));
+const vaneTransitionMs = highQuality ? 680 : 380;
+const vortexCenters = [
+  { x: 0.83, y: 0.070, r: 0.095, spin: 1.00, zone: "B" },
+  { x: 0.90, y: 0.018, r: 0.118, spin: -0.95, zone: "C" },
+  { x: 1.07, y: -0.035, r: 0.145, spin: 0.82, zone: "C" },
+  { x: 0.35, y: 0.058, r: 0.070, spin: -0.68, zone: "A" },
+  { x: 0.65, y: 0.065, r: 0.085, spin: 0.74, zone: "B" },
+];
+
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function smoother(t) {
+  t = clamp(t, 0, 1);
+  return t * t * (3 - 2 * t);
+}
+
+function hexToRgb(hex) {
+  const clean = hex.replace("#", "");
+  return [
+    parseInt(clean.slice(0, 2), 16),
+    parseInt(clean.slice(2, 4), 16),
+    parseInt(clean.slice(4, 6), 16),
+  ];
+}
+
+function rgba(rgb, a) {
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${a})`;
+}
 
 function resize() {
   const rect = canvas.getBoundingClientRect();
-  W = Math.max(760, Math.floor(rect.width * window.devicePixelRatio));
-  H = Math.max(460, Math.floor(rect.height * window.devicePixelRatio));
+  dpr = Math.max(1, Math.min(2.2, window.devicePixelRatio || 1));
+  W = Math.max(780, Math.floor(rect.width * dpr));
+  H = Math.max(500, Math.floor(rect.height * dpr));
   canvas.width = W;
   canvas.height = H;
 }
@@ -79,8 +166,15 @@ function worldToPx(x, y) {
   };
 }
 
+function pxToWorld(x, y) {
+  return {
+    x: x / W * 1.50 - 0.18,
+    y: 0.40 - y / H * 0.80,
+  };
+}
+
 function nacaThickness(x) {
-  const xc = Math.min(1, Math.max(0, x));
+  const xc = clamp(x, 0, 1);
   return 5 * 0.12 * (
     0.2969 * Math.sqrt(xc) -
     0.1260 * xc -
@@ -90,8 +184,8 @@ function nacaThickness(x) {
   );
 }
 
-function inverseRotate(x, y) {
-  const a = -payload.alphaDeg * Math.PI / 180;
+function rotateBody(x, y, alpha = payload.alphaDeg) {
+  const a = alpha * Math.PI / 180;
   const xp = x - 0.25;
   const yp = y;
   return {
@@ -100,8 +194,8 @@ function inverseRotate(x, y) {
   };
 }
 
-function rotate(x, y) {
-  const a = payload.alphaDeg * Math.PI / 180;
+function inverseRotate(x, y) {
+  const a = -payload.alphaDeg * Math.PI / 180;
   const xp = x - 0.25;
   const yp = y;
   return {
@@ -120,6 +214,48 @@ function zoneAngle(zone) {
   return z && z.enabled ? z.angle : 0;
 }
 
+function zoneColor(zone) {
+  return { A: [0, 183, 255], B: [255, 209, 102], C: [87, 204, 153] }[zone] || [245, 247, 250];
+}
+
+function controlledRelief() {
+  return clamp(0.52 * zoneStrength("B") + 0.30 * zoneStrength("C") + 0.16 * zoneStrength("A"), 0, 0.72);
+}
+
+function separationLevel() {
+  const alphaTerm = clamp((alphaPos - 5.2) / 8.5, 0, 1.25);
+  const speedTerm = clamp((payload.velocity - 5.0) / 14.0, 0, 1.0);
+  return clamp((0.72 * alphaTerm + 0.28 * speedTerm) * separationGain * (1 - 0.58 * controlledRelief()), 0, 1.4);
+}
+
+function cavitationLevel() {
+  const thresholdTerm = clamp((payload.cavitationThresholdKpa + 80) / 70, 0, 1.25);
+  const speedTerm = clamp((payload.velocity - 7.0) / 13.0, 0, 1.2);
+  const angleTerm = clamp(alphaPos / 13.0, 0, 1.0);
+  return clamp((0.55 * speedTerm + 0.30 * angleTerm + 0.15 * thresholdTerm) * cavitationGain * (1 - 0.42 * zoneStrength("B")), 0, 1.4);
+}
+
+function speedColor(speed, alpha = 1) {
+  const stops = [
+    [0.00, [21, 58, 138]],
+    [0.23, [0, 183, 255]],
+    [0.46, [87, 204, 153]],
+    [0.68, [255, 209, 102]],
+    [0.84, [255, 140, 58]],
+    [1.00, [255, 48, 77]],
+  ];
+  const t = clamp(speed / (0.026 + 0.013 * speedGain), 0, 1);
+  for (let i = 1; i < stops.length; i++) {
+    if (t <= stops[i][0]) {
+      const a = stops[i - 1];
+      const b = stops[i];
+      const k = (t - a[0]) / (b[0] - a[0]);
+      return `rgba(${Math.round(lerp(a[1][0], b[1][0], k))}, ${Math.round(lerp(a[1][1], b[1][1], k))}, ${Math.round(lerp(a[1][2], b[1][2], k))}, ${alpha})`;
+    }
+  }
+  return `rgba(255, 48, 77, ${alpha})`;
+}
+
 function velocityAt(x, y) {
   const b = inverseRotate(x, y);
   const xb = b.x;
@@ -127,77 +263,95 @@ function velocityAt(x, y) {
   const thickness = nacaThickness(xb);
   const inChord = xb >= 0 && xb <= 1;
   const surfaceDist = Math.abs(Math.abs(yb) - thickness);
-  const near = inChord ? Math.exp(-Math.pow(surfaceDist / (0.055 + 0.012 * attachGain), 2)) : 0;
-  const upper = yb > 0 ? Math.exp(-Math.pow((yb - thickness - 0.022) / 0.072, 2)) : 0;
-  const lower = yb < 0 ? Math.exp(-Math.pow((yb + thickness - 0.022) / 0.080, 2)) : 0;
-  const leading = Math.exp(-Math.pow((xb - 0.20) / 0.23, 2));
-  const mid = Math.exp(-Math.pow((xb - 0.50) / 0.32, 2));
-  const aft = Math.exp(-Math.pow((xb - 0.78) / 0.26, 2));
+  const near = inChord ? Math.exp(-Math.pow(surfaceDist / (0.055 + 0.014 * attachGain), 2)) : 0;
+  const upper = yb > 0 ? Math.exp(-Math.pow((yb - thickness - 0.022) / 0.070, 2)) : 0;
+  const lower = yb < 0 ? Math.exp(-Math.pow((yb + thickness - 0.020) / 0.078, 2)) : 0;
+  const leading = Math.exp(-Math.pow((xb - 0.20) / 0.24, 2));
+  const mid = Math.exp(-Math.pow((xb - 0.52) / 0.34, 2));
+  const aft = Math.exp(-Math.pow((xb - 0.80) / 0.28, 2));
 
-  let vx = 0.0065 + payload.velocity * 0.00185;
+  let vx = 0.0068 + payload.velocity * 0.0019;
   let vy = payload.velocity * 0.00018 * payload.alphaDeg;
-  vx += payload.velocity * 0.00145 * (0.18 + 0.45 * alphaGain) * leading * upper;
-  vx += payload.velocity * 0.00110 * (0.10 + 0.28 * alphaGain) * mid * upper;
-  vx -= payload.velocity * 0.00070 * (0.04 + 0.10 * alphaGain) * mid * lower;
-  vy += payload.velocity * 0.00145 * near * attachGain * Math.sign(yb || 0.01);
+  vx += payload.velocity * 0.00155 * (0.20 + 0.48 * alphaGain) * leading * upper;
+  vx += payload.velocity * 0.00110 * (0.14 + 0.30 * alphaGain) * mid * upper;
+  vx -= payload.velocity * 0.00080 * (0.06 + 0.14 * alphaGain) * mid * lower;
+  vy += payload.velocity * 0.00140 * near * attachGain * Math.sign(yb || 0.01);
 
   const A = zoneStrength("A");
-  if (A && xb >= 0.17 && xb <= 0.36) {
-    const ripple = Math.sin(tick * 0.22 + xb * 80);
-    vx += 0.0060 * A * ripple * upper;
-    vy += 0.0130 * A * Math.cos(tick * 0.18 + xb * 62) * upper;
+  if (A && xb >= 0.17 && xb <= 0.37) {
+    const ripple = Math.sin(tick * 0.080 + xb * 82);
+    vx += 0.0068 * A * ripple * upper;
+    vy += 0.0140 * A * Math.cos(tick * 0.070 + xb * 58) * upper;
   }
 
   const B = zoneStrength("B");
   if (B && xb >= 0.34 && xb <= 0.67) {
     const ramp = Math.sin((xb - 0.34) / 0.33 * Math.PI);
-    vx -= 0.0115 * B * upper;
-    vy += 0.0215 * B * ramp * upper;
-    const localSwirl = Math.sin(tick * 0.16 + xb * 34 + yb * 28);
-    vy += 0.0100 * B * localSwirl * Math.exp(-Math.pow((yb - thickness - 0.055) / 0.12, 2));
+    vx -= 0.0110 * B * upper;
+    vy += 0.0230 * B * ramp * upper;
+    vy += 0.0105 * B * Math.sin(tick * 0.062 + xb * 36 + yb * 28) * Math.exp(-Math.pow((yb - thickness - 0.055) / 0.12, 2));
   }
 
   const C = zoneStrength("C");
   if (xb >= 0.64) {
-    const wakeEnv = Math.exp(-Math.max(0, xb - 0.72) / (0.42 + 0.30 * speedGain));
-    const cOn = Math.max(0.0, C);
-    vx += 0.0120 * cOn * wakeEnv;
-    vy *= 1 - 0.48 * cOn;
-    vy += 0.0060 * (1 - cOn) * wakeGain * Math.sign(yb || 0.01) * Math.exp(-Math.abs(yb) / 0.20);
+    const wakeEnv = Math.exp(-Math.max(0, xb - 0.72) / (0.40 + 0.28 * speedGain));
+    vx += 0.0130 * C * wakeEnv;
+    vy *= 1 - 0.48 * C;
+    vy += 0.0075 * (1 - C) * wakeGain * Math.sign(yb || 0.01) * Math.exp(-Math.abs(yb) / 0.20);
   }
 
-  if (payload.showVortex && xb > 0.74) {
-    const C = zoneStrength("C");
-    const B = zoneStrength("B");
-    const wake = Math.exp(-Math.max(0, xb - 0.82) / (0.46 + 0.20 * speedGain));
-    const damp = Math.max(0.15, 1 - 0.55 * C);
-    const core = (0.028 + 0.045 * alphaGain) * Math.sin((xb - 0.80) * 19 + tick * 0.075);
-    const dy = yb - core - 0.015 * alphaGain;
-    const env = wake * Math.exp(-Math.pow(dy / (0.10 + 0.03 * alphaGain), 2));
-    vx += (0.008 + 0.005 * speedGain) * env * Math.cos(tick * 0.08 + xb * 19) * vortexGain * damp;
-    vy += (0.018 + 0.010 * B) * env * Math.sin(tick * 0.08 + xb * 19) * vortexGain * damp;
-    vy -= 0.008 * alphaGain * wake * wakeGain;
+  const sep = separationLevel();
+  if (payload.showSeparation && sep > 0.02 && inChord && xb > 0.48 && xb < 1.02 && yb > thickness) {
+    const sepStart = lerp(0.72, 0.48, clamp(sep, 0, 1));
+    const window = clamp((xb - sepStart) / (1.0 - sepStart), 0, 1);
+    const band = Math.exp(-Math.pow((yb - thickness - 0.070 - 0.030 * window) / (0.070 + 0.040 * sep), 2));
+    const unsteady = Math.sin(tick * 0.105 + xb * 38 + yb * 18);
+    vx -= 0.0120 * sep * window * band;
+    vy += 0.0180 * sep * window * band * unsteady;
+    if (window > 0.55) vx -= 0.0060 * sep * band * Math.sin(tick * 0.08 + xb * 22);
   }
 
-  if (inChord && Math.abs(yb) < thickness + 0.008) {
-    vy += 0.026 * Math.sign(yb || 0.01);
-    vx *= 0.62;
+  if (payload.showVortex) {
+    for (const vc of vortexCenters) {
+      const local = vc.zone ? zoneStrength(vc.zone) : 0;
+      const power = (0.50 + 0.50 * alphaGain + 0.40 * local) * vortexGain;
+      const dx = xb - vc.x;
+      const dy = yb - vc.y;
+      const rr = dx * dx + dy * dy + 0.0025;
+      const env = Math.exp(-rr / (vc.r * vc.r));
+      const swirl = power * env * vc.spin / (0.17 + 12 * rr);
+      vx += -dy * swirl * 0.0105;
+      vy += dx * swirl * 0.0170;
+    }
+  }
+
+  if (xb > 0.82) {
+    const wake = Math.exp(-Math.max(0, xb - 0.84) / (0.54 + 0.22 * speedGain));
+    const center = 0.020 * Math.sin((xb - 0.84) * 17 + tick * 0.045) + 0.020 * alphaGain;
+    const band = Math.exp(-Math.pow((yb - center) / (0.10 + 0.055 * wakeGain), 2));
+    vx += 0.011 * wakeGain * wake * band * Math.cos(tick * 0.042 + xb * 15);
+    vy += 0.020 * wakeGain * wake * band * Math.sin(tick * 0.052 + xb * 18) * (1 - 0.42 * C);
+  }
+
+  if (inChord && Math.abs(yb) < thickness + 0.010) {
+    vy += 0.030 * Math.sign(yb || 0.01);
+    vx *= 0.58;
   }
 
   const simSpeed = payload.animationSpeed * (0.72 + 0.38 * speedGain);
-  return {vx: vx * simSpeed, vy: vy * simSpeed, speed: Math.sqrt(vx * vx + vy * vy)};
+  return { vx: vx * simSpeed, vy: vy * simSpeed, speed: Math.sqrt(vx * vx + vy * vy) };
 }
 
 function initParticles() {
   particles = [];
-  const count = Math.max(0, payload.particleCount);
+  const baseCount = Math.max(0, payload.particleCount);
+  const count = highQuality ? baseCount : Math.min(baseCount, 900);
   for (let i = 0; i < count; i++) {
-    const biased = Math.random();
-    const nearFoil = biased < 0.62;
+    const nearFoil = Math.random() < 0.68;
     particles.push({
-      x: -0.17 + Math.random() * 1.48,
-      y: nearFoil ? (-0.16 + Math.random() * 0.32) : (-0.35 + Math.random() * 0.70),
-      life: Math.random() * 2.5,
+      x: -0.18 + Math.random() * 1.52,
+      y: nearFoil ? (-0.18 + Math.random() * 0.36) : (-0.36 + Math.random() * 0.72),
+      life: Math.random() * 3.2,
       trail: [],
       phase: Math.random() * Math.PI * 2,
     });
@@ -205,236 +359,455 @@ function initParticles() {
 }
 
 function resetParticle(p) {
-  p.x = -0.18 - Math.random() * (0.05 + 0.05 * emitGain);
-  const nearFoil = Math.random() < 0.70;
-  p.y = nearFoil ? (-0.18 + Math.random() * 0.36) : (-0.35 + Math.random() * 0.70);
+  p.x = -0.18 - Math.random() * (0.05 + 0.06 * emitGain);
+  const focused = Math.random() < 0.74;
+  p.y = focused ? (-0.19 + Math.random() * 0.38) : (-0.36 + Math.random() * 0.72);
   p.life = 0;
   p.trail = [];
 }
 
-function particleColor(speed, alpha) {
-  const t = Math.max(0, Math.min(1, speed / (0.028 + 0.010 * speedGain)));
-  if (t < 0.45) {
-    return `rgba(${20 + 30 * t}, ${92 + 150 * t}, ${180 + 60 * t}, ${alpha})`;
-  }
-  if (t < 0.78) {
-    const k = (t - 0.45) / 0.33;
-    return `rgba(${40 + 140 * k}, ${210 + 35 * k}, ${245}, ${alpha})`;
-  }
-  const k = (t - 0.78) / 0.22;
-  return `rgba(${210 + 45 * k}, ${245 - 25 * k}, ${255 - 120 * k}, ${alpha})`;
-}
-
 function drawPressureBackground() {
+  const bg = ctx.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0.00, "#0B1420");
+  bg.addColorStop(0.55, "#071018");
+  bg.addColorStop(1.00, "#05080C");
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
   if (!payload.showPressure) return;
-  const base = Math.min(0.42, 0.10 + 0.018 * payload.velocity);
-  const grad = ctx.createLinearGradient(0, 0, W, 0);
-  grad.addColorStop(0.00, `rgba(0, 80, 180, ${0.08 + base * 0.20})`);
-  grad.addColorStop(0.27, `rgba(0, 183, 255, ${0.14 + base * 0.42})`);
-  grad.addColorStop(0.52, `rgba(255, 209, 102, ${0.10 + base * 0.28})`);
-  grad.addColorStop(0.82, `rgba(87, 204, 153, ${0.09 + base * 0.18})`);
-  grad.addColorStop(1.00, "rgba(20, 28, 38, 0.10)");
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, W, H);
+  const tiles = highQuality ? 52 : 34;
+  for (let ix = 0; ix < tiles; ix++) {
+    for (let iy = 0; iy < Math.floor(tiles * 0.46); iy++) {
+      const px = (ix + 0.5) / tiles * W;
+      const py = (iy + 0.5) / Math.floor(tiles * 0.46) * H;
+      const w = pxToWorld(px, py);
+      const v = velocityAt(w.x, w.y).speed;
+      const pressureCue = clamp(1.0 - v / (0.030 + 0.014 * speedGain), 0, 1);
+      const lowCue = clamp(v / (0.030 + 0.014 * speedGain), 0, 1);
+      let color;
+      if (pressureCue > 0.55) color = `rgba(255, 209, 102, ${0.020 + 0.045 * pressureCue})`;
+      else color = `rgba(${Math.round(0 + 40 * lowCue)}, ${Math.round(115 + 110 * lowCue)}, ${Math.round(220 + 25 * lowCue)}, ${0.020 + 0.052 * lowCue})`;
+      ctx.fillStyle = color;
+      ctx.fillRect(px - W / tiles * 0.53, py - H / (tiles * 0.46) * 0.53, W / tiles * 1.08, H / (tiles * 0.46) * 1.08);
+    }
+  }
 
-  const low = worldToPx(0.42 + 0.10 * zoneStrength("B"), 0.075 + 0.08 * alphaGain);
-  const radial = ctx.createRadialGradient(low.x, low.y, 8, low.x, low.y, W * (0.22 + 0.06 * speedGain));
-  radial.addColorStop(0, `rgba(255, 77, 202, ${0.15 + 0.26 * zoneStrength("B") + 0.12 * alphaGain})`);
-  radial.addColorStop(1, "rgba(255, 77, 202, 0)");
+  const low = worldToPx(0.48, 0.080 + 0.045 * alphaGain);
+  const radial = ctx.createRadialGradient(low.x, low.y, 8 * dpr, low.x, low.y, W * (0.18 + 0.08 * cavitationLevel()));
+  radial.addColorStop(0, `rgba(255, 48, 180, ${0.06 + 0.20 * cavitationLevel()})`);
+  radial.addColorStop(0.55, `rgba(0, 183, 255, ${0.035 + 0.08 * cavitationLevel()})`);
+  radial.addColorStop(1, "rgba(0, 183, 255, 0)");
   ctx.fillStyle = radial;
-  ctx.fillRect(0, 0, W, H);
-
-  const high = worldToPx(0.10, -0.08);
-  const highRadial = ctx.createRadialGradient(high.x, high.y, 4, high.x, high.y, W * 0.16);
-  highRadial.addColorStop(0, "rgba(255, 209, 102, 0.18)");
-  highRadial.addColorStop(1, "rgba(255, 209, 102, 0)");
-  ctx.fillStyle = highRadial;
   ctx.fillRect(0, 0, W, H);
 }
 
 function drawZones() {
   const zones = [
-    ["A", 0.18, 0.35, "rgba(0,183,255,0.13)"],
-    ["B", 0.35, 0.65, "rgba(255,209,102,0.12)"],
-    ["C", 0.65, 0.82, "rgba(87,204,153,0.12)"],
+    ["A", 0.18, 0.35],
+    ["B", 0.35, 0.65],
+    ["C", 0.65, 0.82],
   ];
   ctx.textAlign = "center";
-  ctx.font = `${Math.max(12, W * 0.014)}px Microsoft YaHei`;
-  for (const [label, x0, x1, color] of zones) {
+  ctx.font = `${Math.max(12, W * 0.012)}px Microsoft YaHei`;
+  for (const [label, x0, x1] of zones) {
+    const rgb = zoneColor(label);
     const p0 = worldToPx(x0, 0.36);
     const p1 = worldToPx(x1, -0.36);
-    ctx.fillStyle = color;
+    const grad = ctx.createLinearGradient(p0.x, 0, p1.x, 0);
+    grad.addColorStop(0, rgba(rgb, 0.035));
+    grad.addColorStop(0.5, rgba(rgb, 0.115));
+    grad.addColorStop(1, rgba(rgb, 0.025));
+    ctx.fillStyle = grad;
     ctx.fillRect(p0.x, p0.y, p1.x - p0.x, p1.y - p0.y);
+    ctx.strokeStyle = rgba(rgb, 0.30);
+    ctx.lineWidth = 1 * dpr;
+    ctx.beginPath();
+    ctx.moveTo(p0.x, p0.y);
+    ctx.lineTo(p0.x, p1.y);
+    ctx.moveTo(p1.x, p0.y);
+    ctx.lineTo(p1.x, p1.y);
+    ctx.stroke();
     if (payload.showZoneLabels !== false) {
       const t = worldToPx((x0 + x1) / 2, 0.315);
-      ctx.fillStyle = "#F5F7FA";
+      ctx.fillStyle = rgba(rgb, 0.98);
+      ctx.font = `800 ${Math.max(13, W * 0.014)}px Microsoft YaHei`;
       ctx.fillText(label, t.x, t.y);
+      const d = payload.zones[label].driveType || "";
+      ctx.font = `${Math.max(9, W * 0.0085)}px Microsoft YaHei`;
+      ctx.fillStyle = "rgba(214,222,232,0.72)";
+      ctx.fillText(d.length > 18 ? d.slice(0, 18) : d, t.x, t.y + 18 * dpr);
     }
   }
+}
+
+function drawWakeHighlight() {
+  const C = zoneStrength("C");
+  const len = 0.28 + 0.18 * speedGain + 0.26 * wakeGain;
+  const spread = 0.060 + 0.046 * wakeGain + 0.035 * alphaGain;
+  const coreY = 0.012 + 0.040 * alphaGain - 0.018 * C;
+  const start = worldToPx(0.80, coreY);
+  const end = worldToPx(0.80 + len, coreY + 0.030 * Math.sin(tick * 0.035));
+  const grad = ctx.createLinearGradient(start.x, start.y, end.x, end.y);
+  grad.addColorStop(0, `rgba(255,255,255,${0.22 + 0.22 * wakeGain})`);
+  grad.addColorStop(0.18, `rgba(0,183,255,${0.24 + 0.24 * wakeGain})`);
+  grad.addColorStop(0.58, `rgba(87,204,153,${0.10 + 0.17 * wakeGain})`);
+  grad.addColorStop(1, "rgba(255,140,58,0)");
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.lineCap = "round";
+  for (let i = 0; i < (highQuality ? 10 : 6); i++) {
+    const offset = (i - 4.5) * spread / 5;
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = (8 + i * 4 + 18 * wakeGain) * dpr;
+    ctx.globalAlpha = 0.10 + 0.035 * i;
+    ctx.beginPath();
+    for (let k = 0; k <= 42; k++) {
+      const t = k / 42;
+      const x = 0.82 + len * t;
+      const y = coreY + offset * Math.exp(-t * 1.5) + 0.018 * wakeGain * Math.sin(tick * 0.045 + t * 12 + i);
+      const p = worldToPx(x, y);
+      if (k === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawFoil() {
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 183, 255, 0.38)";
+  ctx.shadowBlur = 18 * dpr;
   ctx.beginPath();
   for (let i = 0; i < payload.foilOutline.length; i++) {
     const p = worldToPx(payload.foilOutline[i].x, payload.foilOutline[i].y);
-    if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    if (i === 0) ctx.moveTo(p.x, p.y);
+    else ctx.lineTo(p.x, p.y);
   }
   ctx.closePath();
-  ctx.fillStyle = "rgba(245,247,250,0.97)";
+  const grad = ctx.createLinearGradient(0, H * 0.38, 0, H * 0.60);
+  grad.addColorStop(0, "#F8FBFF");
+  grad.addColorStop(0.45, "#B8C8D8");
+  grad.addColorStop(1, "#617589");
+  ctx.fillStyle = grad;
   ctx.fill();
-  ctx.lineWidth = 2.2;
-  ctx.strokeStyle = "#071018";
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 2.2 * dpr;
+  ctx.strokeStyle = "rgba(6, 12, 18, 0.96)";
   ctx.stroke();
+  ctx.restore();
 }
 
-function drawAZoneRipples() {
-  const A = zoneStrength("A");
-  if (!A) return;
-  ctx.lineWidth = 1.3;
-  for (let i = 0; i < 7; i++) {
-    const x = 0.18 + i * 0.027;
-    const root = rotate(x, nacaThickness(x) + 0.028 + 0.010 * Math.sin(tick * 0.16 + i));
-    const p = worldToPx(root.x, root.y);
-    ctx.strokeStyle = `rgba(0,183,255,${0.15 + 0.42 * A})`;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, (10 + 8 * A + i * 0.8) * window.devicePixelRatio, tick * 0.06 + i, tick * 0.06 + i + Math.PI * 0.85);
-    ctx.stroke();
+function previousAngles() {
+  const key = "hydrofoil_vane_angles";
+  try {
+    const prev = JSON.parse(localStorage.getItem(key) || "{}");
+    const next = {};
+    for (const z of ["A", "B", "C"]) next[z] = zoneAngle(z);
+    localStorage.setItem(key, JSON.stringify(next));
+    return prev || {};
+  } catch (_) {
+    return {};
   }
 }
+const startAngles = previousAngles();
 
-function drawVanes() {
+function animatedZoneAngle(zone, now) {
+  const target = Math.min(zoneAngle(zone), payload.vaneDeployAngle || zoneAngle(zone));
+  const start = typeof startAngles[zone] === "number" ? startAngles[zone] : 0;
+  const k = smoother(Math.min(1, (now - animationStart) / vaneTransitionMs));
+  return lerp(start, target, k);
+}
+
+function drawVanes(now) {
   if (!payload.showVanes) return;
   const specs = [
-    ["A", [0.205, 0.245, 0.285, 0.325], 0.040, "#00B7FF", "wedge"],
-    ["B", [0.405, 0.485, 0.565, 0.635], 0.078, "#FFD166", "flap"],
-    ["C", [0.675, 0.730, 0.785], 0.064, "#57CC99", "swept"],
+    ["A", [0.205, 0.245, 0.285, 0.325], 0.044, "wedge"],
+    ["B", [0.400, 0.475, 0.550, 0.625], 0.082, "flap"],
+    ["C", [0.680, 0.735, 0.790], 0.066, "swept"],
   ];
-  for (const [zone, xs, length, color, kind] of specs) {
-    if (!payload.zones[zone].enabled) continue;
+  ctx.save();
+  ctx.globalCompositeOperation = "source-over";
+  for (const [zone, xs, length, kind] of specs) {
+    const z = payload.zones[zone];
+    const rgb = zoneColor(zone);
+    const angle = animatedZoneAngle(zone, now);
+    const enabled = z.enabled && angle > 0.01;
     for (const x of xs) {
-      const angle = zoneAngle(zone);
-      const root = rotate(x, nacaThickness(x) + 0.010);
-      const theta = (payload.alphaDeg + angle) * Math.PI / 180;
-      const tip = {x: root.x + length * Math.cos(theta), y: root.y + length * Math.sin(theta)};
-      const p0 = worldToPx(root.x, root.y);
-      const p1 = worldToPx(tip.x, tip.y);
-      ctx.strokeStyle = color;
-      ctx.fillStyle = color;
-      ctx.lineWidth = kind === "B" ? 4.4 : 3.0;
-      ctx.beginPath();
-      ctx.moveTo(p0.x, p0.y);
-      ctx.lineTo(p1.x, p1.y);
-      ctx.stroke();
+      const baseT = nacaThickness(x);
+      const root = rotateBody(x, baseT + 0.010);
+      const theta = (payload.alphaDeg + (enabled ? angle : 0.0)) * Math.PI / 180;
+      const tip = {
+        x: root.x + length * Math.cos(theta),
+        y: root.y + length * Math.sin(theta),
+      };
+      const hinge = worldToPx(root.x, root.y);
+      const end = worldToPx(tip.x, tip.y);
+      const deck = worldToPx(root.x + length * 0.86, root.y + length * 0.10 * Math.sin(theta));
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.shadowColor = rgba(rgb, 0.65);
+      ctx.shadowBlur = enabled ? 16 * dpr : 5 * dpr;
+      ctx.strokeStyle = rgba(rgb, enabled ? 0.95 : 0.40);
+      ctx.fillStyle = rgba(rgb, enabled ? 0.40 : 0.16);
+      ctx.lineWidth = (kind === "flap" ? 5.2 : 3.6) * dpr;
       if (kind === "wedge") {
         ctx.beginPath();
-        ctx.moveTo(p0.x, p0.y);
-        ctx.lineTo(p1.x, p1.y);
-        ctx.lineTo(p0.x + 8, p0.y + 2);
+        ctx.moveTo(hinge.x, hinge.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.lineTo(deck.x, deck.y + 2 * dpr);
         ctx.closePath();
-        ctx.globalAlpha = 0.65;
         ctx.fill();
-        ctx.globalAlpha = 1.0;
-      }
-      if (kind === "swept") {
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p1.x - 10 * window.devicePixelRatio, p1.y + 5 * window.devicePixelRatio);
         ctx.stroke();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(hinge.x, hinge.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.stroke();
+        if (kind === "swept") {
+          ctx.beginPath();
+          ctx.moveTo(end.x, end.y);
+          ctx.lineTo(end.x - 11 * dpr, end.y + 5 * dpr);
+          ctx.stroke();
+        }
       }
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = "rgba(5, 9, 14, 0.86)";
+      ctx.beginPath();
+      ctx.arc(hinge.x, hinge.y, 3.1 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (payload.showZoneLabels !== false) {
+      const labelPoint = worldToPx((z.range[0] + z.range[1]) * 0.5, -0.285);
+      ctx.fillStyle = rgba(rgb, 0.96);
+      ctx.font = `800 ${12 * dpr}px Microsoft YaHei`;
+      ctx.fillText(`${zone} ${Math.round(angle)}°`, labelPoint.x, labelPoint.y);
+      ctx.font = `${10 * dpr}px Microsoft YaHei`;
+      ctx.fillStyle = "rgba(214,222,232,0.70)";
+      const blade = z.bladeType || "";
+      ctx.fillText(blade.length > 16 ? blade.slice(0, 16) : blade, labelPoint.x, labelPoint.y + 15 * dpr);
     }
   }
+  ctx.restore();
+}
+
+function drawVortexMarks() {
+  if (!payload.showVortex) return;
+  const sep = separationLevel();
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const vc of vortexCenters) {
+    const local = vc.zone ? zoneStrength(vc.zone) : 0;
+    const intensity = clamp((0.45 + 0.45 * alphaGain + 0.35 * local + 0.20 * sep) * vortexGain, 0, 1.7);
+    if (intensity <= 0.02) continue;
+    const p = worldToPx(vc.x, vc.y + 0.012 * Math.sin(tick * 0.04 + vc.x * 10));
+    const r = (vc.r * W / 1.50) * (0.62 + 0.28 * Math.sin(tick * 0.025 + vc.x));
+    const rgb = zoneColor(vc.zone || "C");
+    ctx.strokeStyle = rgba(rgb, 0.12 + 0.26 * intensity);
+    ctx.lineWidth = (1.2 + 2.0 * intensity) * dpr;
+    for (let i = 0; i < 3; i++) {
+      const phase = tick * 0.025 * vc.spin + i * 2.1;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r * (0.56 + 0.25 * i), phase, phase + Math.PI * (1.15 + 0.22 * i));
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+function drawSeparationZone() {
+  const sep = separationLevel();
+  if (!payload.showSeparation || sep <= 0.02) return;
+  const start = lerp(0.78, 0.48, clamp(sep, 0, 1));
+  const end = 1.02 + 0.14 * sep;
+  const pointsTop = [];
+  const pointsBottom = [];
+  const steps = highQuality ? 28 : 18;
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = lerp(start, end, t);
+    const base = nacaThickness(clamp(x, 0, 1));
+    const jitter = 0.008 * sep * Math.sin(tick * 0.070 + i * 1.55);
+    const top = base + 0.062 + 0.060 * sep * Math.sin(t * Math.PI) + jitter;
+    const bottom = base + 0.018 + 0.012 * Math.sin(t * Math.PI);
+    pointsTop.push(worldToPx(rotateBody(x, top).x, rotateBody(x, top).y));
+    pointsBottom.push(worldToPx(rotateBody(x, bottom).x, rotateBody(x, bottom).y));
+  }
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.beginPath();
+  pointsBottom.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+  pointsTop.slice().reverse().forEach(p => ctx.lineTo(p.x, p.y));
+  ctx.closePath();
+  const grad = ctx.createLinearGradient(pointsBottom[0].x, pointsBottom[0].y, pointsTop[pointsTop.length - 1].x, pointsTop[pointsTop.length - 1].y);
+  grad.addColorStop(0, `rgba(255, 209, 102, ${0.05 + 0.12 * sep})`);
+  grad.addColorStop(0.45, `rgba(255, 140, 58, ${0.08 + 0.16 * sep})`);
+  grad.addColorStop(1, `rgba(255, 48, 77, ${0.05 + 0.12 * sep})`);
+  ctx.fillStyle = grad;
+  ctx.fill();
+  ctx.strokeStyle = `rgba(255, 236, 170, ${0.22 + 0.34 * sep})`;
+  ctx.lineWidth = (1.0 + sep * 1.7) * dpr;
+  ctx.setLineDash([8 * dpr, 7 * dpr]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function updateBubbles(dt) {
+  if (!payload.showCavitationBubbles) {
+    bubbles = [];
+    return;
+  }
+  const cav = cavitationLevel();
+  const spawnRate = (highQuality ? 0.60 : 0.36) * cav * emitGain;
+  if (Math.random() < spawnRate) {
+    const cluster = Math.random();
+    const x = cluster < 0.58 ? lerp(0.25, 0.62, Math.random()) : lerp(0.60, 0.96, Math.random());
+    const y = nacaThickness(clamp(x, 0, 1)) + lerp(0.030, 0.115, Math.random()) + alphaGain * 0.026;
+    const p = rotateBody(x, y);
+    bubbles.push({
+      x: p.x,
+      y: p.y,
+      r: lerp(0.004, 0.014 + 0.010 * cav, Math.random()),
+      life: 0,
+      maxLife: lerp(0.7, 1.8, Math.random()),
+      drift: lerp(0.010, 0.030, Math.random()) * (0.7 + speedGain),
+      wobble: Math.random() * Math.PI * 2,
+    });
+  }
+  const cap = highQuality ? 110 : 58;
+  if (bubbles.length > cap) bubbles.splice(0, bubbles.length - cap);
+  for (const b of bubbles) {
+    b.life += dt;
+    b.x += b.drift * dt;
+    b.y += (0.006 + 0.006 * Math.sin(tick * 0.06 + b.wobble)) * dt;
+    b.r *= 1 + 0.18 * dt;
+  }
+  bubbles = bubbles.filter(b => b.life < b.maxLife && b.x < 1.34 && b.y < 0.38);
+}
+
+function drawBubbles() {
+  if (!payload.showCavitationBubbles || bubbles.length === 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  for (const b of bubbles) {
+    const life = b.life / b.maxLife;
+    const p = worldToPx(b.x, b.y);
+    const r = b.r * W / 1.50;
+    const a = Math.sin(life * Math.PI);
+    const grad = ctx.createRadialGradient(p.x - r * 0.25, p.y - r * 0.25, r * 0.1, p.x, p.y, r);
+    grad.addColorStop(0, `rgba(255,255,255,${0.45 * a})`);
+    grad.addColorStop(0.45, `rgba(190,235,255,${0.20 * a})`);
+    grad.addColorStop(1, "rgba(120,210,255,0)");
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(226, 250, 255, ${0.35 * a})`;
+    ctx.lineWidth = 0.8 * dpr;
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function drawParticles() {
+  if (!payload.showParticles || !payload.particleCount) return;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
   for (const p of particles) {
     const v = velocityAt(p.x, p.y);
-    p.trail.push({x: p.x, y: p.y, s: v.speed});
+    p.trail.push({ x: p.x, y: p.y, s: v.speed });
     if (p.trail.length > trailLimit) p.trail.shift();
     if (payload.playing) {
       p.x += v.vx;
       p.y += v.vy;
-      p.life += 0.01 * (0.75 + speedGain);
+      p.life += 0.010 * (0.7 + speedGain);
     }
-    if (p.x > 1.35 || p.y > 0.43 || p.y < -0.43 || p.life > 4.0) resetParticle(p);
+    if (p.x > 1.35 || p.y > 0.43 || p.y < -0.43 || p.life > 4.4) resetParticle(p);
     for (let i = 1; i < p.trail.length; i++) {
       const a = i / p.trail.length;
       const p0 = worldToPx(p.trail[i - 1].x, p.trail[i - 1].y);
       const p1 = worldToPx(p.trail[i].x, p.trail[i].y);
-      ctx.strokeStyle = particleColor(p.trail[i].s, 0.04 + 0.50 * a);
-      ctx.lineWidth = (1.0 + 2.1 * a + 0.45 * speedGain) * window.devicePixelRatio;
+      ctx.strokeStyle = speedColor(p.trail[i].s, 0.025 + 0.62 * a);
+      ctx.lineWidth = (0.75 + 2.35 * a + 0.70 * speedGain) * dpr;
       ctx.beginPath();
       ctx.moveTo(p0.x, p0.y);
       ctx.lineTo(p1.x, p1.y);
       ctx.stroke();
     }
     const pp = worldToPx(p.x, p.y);
-    ctx.fillStyle = particleColor(v.speed, 0.96);
+    ctx.fillStyle = speedColor(v.speed, 0.98);
+    ctx.shadowColor = speedColor(v.speed, 0.65);
+    ctx.shadowBlur = (highQuality ? 7 : 4) * dpr;
     ctx.beginPath();
-    ctx.arc(pp.x, pp.y, Math.max(1.6, W * 0.0020), 0, Math.PI * 2);
+    ctx.arc(pp.x, pp.y, Math.max(1.6, W * 0.0018), 0, Math.PI * 2);
     ctx.fill();
   }
+  ctx.restore();
 }
 
-function drawVortexMarks() {
-  if (!payload.showVortex) return;
-  const C = zoneStrength("C");
-  const B = zoneStrength("B");
-  const damp = Math.max(0.18, 1 - 0.55 * C);
-  const intensity = (0.55 + 0.28 * speedGain + 0.25 * alphaGain + 0.30 * B) * vortexGain * damp;
-  const spread = 0.030 + 0.065 * (1 - C) + 0.030 * alphaGain;
-  const cores = [
-    [0.90, 0.045 + spread, 32],
-    [1.05, -0.030 - spread * 0.55, -42],
-    [1.22, 0.018 + spread * 0.35, 50],
-  ];
-  ctx.lineWidth = (1.1 + 1.8 * intensity) * window.devicePixelRatio;
-  for (const [x, y, phase] of cores) {
-    const c = worldToPx(x, y);
-    const r = Math.max(18, W * (0.030 + 0.025 * intensity));
-    ctx.strokeStyle = `rgba(255,255,255,${0.08 + 0.32 * intensity})`;
-    ctx.beginPath();
-    ctx.arc(c.x, c.y, r, tick * 0.035 + phase, tick * 0.035 + phase + Math.PI * 1.48);
-    ctx.stroke();
+function drawFlowArrows() {
+  ctx.save();
+  ctx.globalAlpha = 0.42;
+  ctx.lineWidth = 1.1 * dpr;
+  ctx.strokeStyle = "rgba(214, 222, 232, 0.30)";
+  ctx.fillStyle = "rgba(214, 222, 232, 0.48)";
+  const rows = highQuality ? 7 : 5;
+  for (let row = 0; row < rows; row++) {
+    const y = lerp(-0.30, 0.30, row / Math.max(1, rows - 1));
+    for (let i = 0; i < 5; i++) {
+      const x = -0.10 + i * 0.22 + ((tick * 0.0035 * speedGain) % 0.22);
+      const p0 = worldToPx(x, y + 0.006 * Math.sin(tick * 0.03 + i + row));
+      const p1 = worldToPx(x + 0.060, y + 0.006 * Math.sin(tick * 0.03 + i + row + 0.4));
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p1.x - 6 * dpr, p1.y - 3 * dpr);
+      ctx.lineTo(p1.x - 6 * dpr, p1.y + 3 * dpr);
+      ctx.closePath();
+      ctx.fill();
+    }
   }
+  ctx.restore();
 }
 
-function drawSeparationCloud() {
-  const B = zoneStrength("B");
-  if (alphaGain < 0.35 && B < 0.25) return;
-  const strength = Math.min(1, 0.45 * alphaGain + 0.65 * B);
-  for (let i = 0; i < 18; i++) {
-    const x = 0.45 + Math.random() * 0.36;
-    const y = 0.08 + Math.random() * (0.10 + 0.04 * alphaGain);
-    const p = worldToPx(x, y);
-    const r = (4 + Math.random() * 16) * window.devicePixelRatio;
-    ctx.fillStyle = `rgba(255,209,102,${0.018 + 0.060 * strength})`;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-    ctx.fill();
-  }
+function updateHud() {
+  const sep = separationLevel();
+  const cav = cavitationLevel();
+  hud.innerHTML =
+    `<b>Concept flow viewport</b><br>` +
+    `U=${payload.velocity.toFixed(1)} m/s&nbsp;&nbsp; alpha=${payload.alphaDeg.toFixed(1)}°<br>` +
+    `particles=${particles.length}&nbsp;&nbsp; trail=${trailLimit}&nbsp;&nbsp; ${payload.qualityMode}<br>` +
+    `wake=${wakeGain.toFixed(2)} vortex=${vortexGain.toFixed(2)} sep=${sep.toFixed(2)} cav=${cav.toFixed(2)}<br>` +
+    `<span class="zone-tag" style="background:#00B7FF">A</span>${Math.round(zoneAngle("A"))}° ` +
+    `<span class="zone-tag" style="background:#FFD166">B</span>${Math.round(zoneAngle("B"))}° ` +
+    `<span class="zone-tag" style="background:#57CC99">C</span>${Math.round(zoneAngle("C"))}°`;
 }
 
-function frame() {
-  ctx.fillStyle = `rgba(14,17,23,${0.18 + 0.12 / Math.max(0.7, speedGain)})`;
-  ctx.fillRect(0, 0, W, H);
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000 || 0.016);
+  lastTime = now;
   drawPressureBackground();
   drawZones();
-  drawAZoneRipples();
+  drawFlowArrows();
+  drawWakeHighlight();
+  drawSeparationZone();
   drawVortexMarks();
-  drawSeparationCloud();
+  updateBubbles(dt);
+  drawBubbles();
   drawParticles();
   drawFoil();
-  drawVanes();
-  hud.innerHTML =
-    `U=${payload.velocity.toFixed(1)} m/s&nbsp;&nbsp; alpha=${payload.alphaDeg.toFixed(1)}°<br>` +
-    `particles=${payload.particleCount}&nbsp;&nbsp; trail=${trailLimit}&nbsp;&nbsp; ${payload.playing ? "播放" : "暂停"}<br>` +
-    `A ${payload.zones.A.angle.toFixed(1)}° / B ${payload.zones.B.angle.toFixed(1)}° / C ${payload.zones.C.angle.toFixed(1)}°`;
+  drawVanes(now);
+  updateHud();
   if (payload.playing) tick += 1;
   requestAnimationFrame(frame);
 }
 
 initParticles();
-frame();
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>

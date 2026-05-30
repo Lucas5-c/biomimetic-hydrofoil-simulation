@@ -325,7 +325,7 @@ def create_module_surface_curve_figure(result: dict, params: dict[str, Any]) -> 
 
 def render_canvas_module(result: dict, params: dict[str, Any]) -> None:
     visual = params["visual"]
-    module_title("动态水流粒子", "HTML5 Canvas 粒子流从左向右绕过水翼，A/B/C 分区扰动实时可见")
+    module_title("动态水流粒子", "Canvas 实时渲染尾迹辉光、速度色带、局部涡旋、叶片展开、分离区与空化气泡")
     payload = canvas_payload(
         velocity=params["flow"]["velocity"],
         alpha_deg=params["flow"]["alpha_deg"],
@@ -336,6 +336,7 @@ def render_canvas_module(result: dict, params: dict[str, Any]) -> None:
         grid_density=params["flow"]["grid_density"],
         zones=params["zones"],
         show_pressure=visual["show_pressure"],
+        show_particles=visual["show_particles"],
         show_vortex=visual["show_vortex"],
         show_vanes=visual["show_vanes"],
         playing=visual["playing"],
@@ -345,6 +346,12 @@ def render_canvas_module(result: dict, params: dict[str, Any]) -> None:
         attachment_strength=visual["attachment_strength"],
         wake_strength=visual["wake_strength"],
         vortex_strength=visual["vortex_strength"],
+        separation_strength=visual["separation_strength"],
+        cavitation_strength=visual["cavitation_strength"],
+        vane_deploy_angle=visual["vane_deploy_angle"],
+        quality_mode=visual["quality_mode"],
+        show_cavitation_bubbles=visual["show_cavitation_bubbles"],
+        show_separation=visual["show_separation"],
     )
     render_flow_canvas(payload, height=660)
     render_canvas_exports(result, params)

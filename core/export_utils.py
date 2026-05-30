@@ -268,9 +268,61 @@ def _world_to_px(x: float, y: float, width: int, height: int) -> tuple[int, int]
     return int((x + 0.18) / 1.50 * width), int((0.40 - y) / 0.80 * height)
 
 
-def _draw_particle_frame(traces: np.ndarray, frame_index: int, width: int, height: int, alpha_deg: float) -> Image.Image:
+def _trace_visual_kwargs(params: dict) -> dict:
+    return {
+        "wake_strength": float(params.get("wake_strength", 0.72)),
+        "vortex_strength": float(params.get("vortex_strength", 0.70)),
+        "separation_strength": float(params.get("separation_strength", 0.70)),
+        "attachment_strength": float(params.get("attachment_strength", 0.78)),
+    }
+
+
+def _speed_rgba(value: float, alpha: int) -> tuple[int, int, int, int]:
+    stops = [
+        (0.00, (21, 58, 138)),
+        (0.23, (0, 183, 255)),
+        (0.46, (87, 204, 153)),
+        (0.68, (255, 209, 102)),
+        (0.84, (255, 140, 58)),
+        (1.00, (255, 48, 77)),
+    ]
+    t = max(0.0, min(1.0, value))
+    for idx in range(1, len(stops)):
+        if t <= stops[idx][0]:
+            lo_t, lo_rgb = stops[idx - 1]
+            hi_t, hi_rgb = stops[idx]
+            k = (t - lo_t) / max(1e-9, hi_t - lo_t)
+            rgb = tuple(int(lo_rgb[channel] + (hi_rgb[channel] - lo_rgb[channel]) * k) for channel in range(3))
+            return (*rgb, alpha)
+    return 255, 48, 77, alpha
+
+
+def _draw_wake_preview(draw: ImageDraw.ImageDraw, width: int, height: int, alpha_deg: float, wake_strength: float) -> None:
+    center_y = 0.012 + 0.035 * max(0.0, alpha_deg) / 12.0
+    for band in range(9):
+        fade = int(22 + 14 * band + 38 * wake_strength)
+        y_offset = (band - 4) * (0.006 + 0.006 * wake_strength)
+        points = []
+        for idx in range(38):
+            t = idx / 37
+            x = 0.82 + (0.32 + 0.22 * wake_strength) * t
+            y = center_y + y_offset * np.exp(-1.6 * t) + 0.018 * wake_strength * np.sin(t * 12 + band)
+            points.append(_world_to_px(float(x), float(y), width, height))
+        draw.line(points, fill=(0, 183, 255, min(210, fade)), width=max(2, int(3 + band * 0.7)))
+
+
+def _draw_particle_frame(
+    traces: np.ndarray,
+    frame_index: int,
+    width: int,
+    height: int,
+    alpha_deg: float,
+    params: dict | None = None,
+) -> Image.Image:
+    params = params or {}
     image = Image.new("RGB", (width, height), "#0E1117")
     draw = ImageDraw.Draw(image, "RGBA")
+    _draw_wake_preview(draw, width, height, alpha_deg, float(params.get("wake_strength", 0.72)))
     for zone, (x0, x1) in ZONE_RANGES.items():
         p0 = _world_to_px(x0, 0.36, width, height)
         p1 = _world_to_px(x1, -0.36, width, height)
@@ -287,7 +339,8 @@ def _draw_particle_frame(traces: np.ndarray, frame_index: int, width: int, heigh
             fade = int(30 + 180 * idx / max(1, len(tail)))
             p0 = _world_to_px(float(tail[idx - 1, 0]), float(tail[idx - 1, 1]), width, height)
             p1 = _world_to_px(float(tail[idx, 0]), float(tail[idx, 1]), width, height)
-            draw.line([p0, p1], fill=(0, 183, 255, fade), width=2)
+            speed = float(np.linalg.norm(tail[idx] - tail[idx - 1])) / 0.022
+            draw.line([p0, p1], fill=_speed_rgba(speed, fade), width=2)
     return image
 
 
@@ -299,8 +352,9 @@ def generate_particle_snapshot_png(params: dict, path: Path) -> Path:
         zones=params["zones"],
         particle_count=min(int(params.get("particle_count", 700)), 420),
         steps=24,
+        **_trace_visual_kwargs(params),
     )
-    image = _draw_particle_frame(traces, traces.shape[0] - 1, 900, 500, float(params["alpha_deg"]))
+    image = _draw_particle_frame(traces, traces.shape[0] - 1, 900, 500, float(params["alpha_deg"]), params)
     image.save(path)
     return path
 
@@ -313,8 +367,9 @@ def generate_particle_animation_gif(params: dict, path: Path, frames: int = 36) 
         zones=params["zones"],
         particle_count=min(int(params.get("particle_count", 700)), 420),
         steps=frames,
+        **_trace_visual_kwargs(params),
     )
-    images = [_draw_particle_frame(traces, i, 900, 500, float(params["alpha_deg"])) for i in range(frames)]
+    images = [_draw_particle_frame(traces, i, 900, 500, float(params["alpha_deg"]), params) for i in range(frames)]
     images[0].save(path, save_all=True, append_images=images[1:], duration=70, loop=0)
     return path
 
