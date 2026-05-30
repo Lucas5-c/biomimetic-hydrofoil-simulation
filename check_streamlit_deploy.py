@@ -194,8 +194,36 @@ def check_installed_dependencies(report: list[str]) -> bool:
 def check_canvas_payload_visual_params(report: list[str]) -> bool:
     report.append("## Canvas Payload Visual Parameters")
     try:
+        from components.flow_canvas import canvas_payload as component_canvas_payload
         from core.params import ZONE_UI, merge_visual_defaults
-        from core.particle_flow_model import canvas_payload
+
+        component_payload = component_canvas_payload(
+            velocity=8.0,
+            angle=4.0,
+            animation_speed=1.0,
+            particle_count=1500,
+            trail_length=6,
+            emission_rate=1.2,
+            attachment_strength=1.0,
+            wake_strength=1.2,
+            vortex_strength=1.0,
+            pressure_background=True,
+            show_particles=True,
+            show_separation=True,
+            separation_strength=0.8,
+            show_cavitation=True,
+            cavitation_strength=0.7,
+            show_wake_highlight=True,
+            wake_highlight_strength=1.0,
+            show_speed_colormap=True,
+            speed_colormap_strength=1.0,
+            show_local_vortices=True,
+            vortex_animation_strength=0.8,
+            show_blade_animation=True,
+            blade_animation_strength=1.0,
+        )
+        assert component_payload["show_separation"] is True
+        assert component_payload["separation_strength"] == 0.8
 
         zones = {
             zone: {
@@ -223,7 +251,7 @@ def check_canvas_payload_visual_params(report: list[str]) -> bool:
                 "show_local_vortices": True,
             }
         )
-        payload = canvas_payload(
+        payload = component_canvas_payload(
             velocity=8.0,
             alpha_deg=4.0,
             rho=1000.0,

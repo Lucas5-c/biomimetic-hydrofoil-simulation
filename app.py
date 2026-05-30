@@ -16,7 +16,7 @@ except ModuleNotFoundError:
 import matplotlib.pyplot as plt
 import numpy as np
 
-from components.flow_canvas import render_flow_canvas
+from components.flow_canvas import canvas_payload, render_flow_canvas
 from core.export_utils import (
     OUTPUT_DIR,
     create_pressure_figure,
@@ -45,7 +45,6 @@ from core.params import (
     tuple_to_zones,
     zones_to_tuple,
 )
-from core.particle_flow_model import canvas_payload
 from core.ui_panels import record_export, render_left_panel, render_right_panel
 from core.zone_control import ZONE_COLORS, ZONE_RANGES
 
@@ -352,6 +351,16 @@ def render_canvas_module(result: dict, params: dict[str, Any]) -> None:
         quality_mode=visual.get("quality_mode", "高画质"),
         show_cavitation_bubbles=visual.get("show_cavitation_bubbles", True),
         show_separation=visual.get("show_separation", visual.get("show_separation_zone", True)),
+        show_separation_zone=visual.get("show_separation_zone", visual.get("show_separation", True)),
+        show_cavitation=visual.get("show_cavitation", visual.get("show_cavitation_bubbles", True)),
+        show_wake_highlight=visual.get("show_wake_highlight", True),
+        wake_highlight_strength=visual.get("wake_highlight_strength", visual.get("wake_strength", 1.0)),
+        show_speed_colormap=visual.get("show_speed_colormap", True),
+        speed_colormap_strength=visual.get("speed_colormap_strength", 1.0),
+        show_local_vortices=visual.get("show_local_vortices", visual.get("show_vortex", True)),
+        vortex_animation_strength=visual.get("vortex_animation_strength", visual.get("vortex_strength", 0.8)),
+        show_blade_animation=visual.get("show_blade_animation", visual.get("show_vanes", True)),
+        blade_animation_strength=visual.get("blade_animation_strength", 1.0),
     )
     render_flow_canvas(payload, height=660)
     render_canvas_exports(result, params)
