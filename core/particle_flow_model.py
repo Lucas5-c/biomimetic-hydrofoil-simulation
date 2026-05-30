@@ -33,7 +33,22 @@ def canvas_payload(
     show_cavitation_bubbles: bool = True,
     show_separation: bool = True,
     pressure_background: list[list[float]] | None = None,
+    **extra: object,
 ) -> dict:
+    if "show_separation_zone" in extra:
+        show_separation = bool(extra["show_separation_zone"])
+    if "show_cavitation" in extra:
+        show_cavitation_bubbles = bool(extra["show_cavitation"])
+
+    wake_highlight_strength = float(extra.get("wake_highlight_strength", wake_strength))
+    speed_colormap_strength = float(extra.get("speed_colormap_strength", 1.0))
+    vortex_animation_strength = float(extra.get("vortex_animation_strength", vortex_strength))
+    blade_animation_strength = float(extra.get("blade_animation_strength", 1.0 if show_vanes else 0.0))
+    show_wake_highlight = bool(extra.get("show_wake_highlight", True))
+    show_speed_colormap = bool(extra.get("show_speed_colormap", True))
+    show_local_vortices = bool(extra.get("show_local_vortices", show_vortex))
+    show_blade_animation = bool(extra.get("show_blade_animation", show_vanes))
+
     zone_settings = normalize_zone_settings(zones)
     zone_payload = {
         zone: {
@@ -59,7 +74,7 @@ def canvas_payload(
             np.concatenate([yu, yl[::-1]]),
         )
     ]
-    return {
+    payload = {
         "velocity": velocity,
         "alphaDeg": alpha_deg,
         "rho": rho,
@@ -86,18 +101,21 @@ def canvas_payload(
         "qualityMode": quality_mode,
         "showCavitationBubbles": show_cavitation_bubbles,
         "showSeparation": show_separation,
-        "wakeHighlightStrength": float(wake_strength),
-        "speedColormapStrength": 1.0,
-        "vortexAnimationStrength": float(vortex_strength),
-        "bladeAnimationStrength": 1.0 if show_vanes else 0.0,
-        "showWakeHighlight": True,
-        "showSpeedColormap": True,
-        "showLocalVortices": show_vortex,
-        "showBladeAnimation": show_vanes,
+        "showCavitation": show_cavitation_bubbles,
+        "wakeHighlightStrength": wake_highlight_strength,
+        "speedColormapStrength": speed_colormap_strength,
+        "vortexAnimationStrength": vortex_animation_strength,
+        "bladeAnimationStrength": blade_animation_strength,
+        "showWakeHighlight": show_wake_highlight,
+        "showSpeedColormap": show_speed_colormap,
+        "showLocalVortices": show_local_vortices,
+        "showBladeAnimation": show_blade_animation,
         "showSeparationZone": show_separation,
         "foilOutline": outline,
         "pressureBackground": pressure_background or [],
     }
+    payload.update(extra)
+    return payload
 
 
 def particle_trace_samples(

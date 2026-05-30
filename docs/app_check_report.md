@@ -1,7 +1,7 @@
 # Streamlit Deploy Check Report
 
 - Version: `v01`
-- Generated: `2026-05-30T15:00:07`
+- Generated: `2026-05-30T16:05:39`
 - Result: `PASS`
 
 ## Required Structure
@@ -62,6 +62,9 @@
 - OK `matplotlib` import is available
 - OK `pillow` import is available
 - OK `plotly` import is available
+
+## Canvas Payload Visual Parameters
+- OK canvas payload accepts advanced visual parameters
 
 ## Core Simulation And Export
 - OK generated `assets/outputs/test_deploy_pressure_field.png`

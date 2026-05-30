@@ -191,6 +191,103 @@ def check_installed_dependencies(report: list[str]) -> bool:
     return True
 
 
+def check_canvas_payload_visual_params(report: list[str]) -> bool:
+    report.append("## Canvas Payload Visual Parameters")
+    try:
+        from core.params import ZONE_UI, merge_visual_defaults
+        from core.particle_flow_model import canvas_payload
+
+        zones = {
+            zone: {
+                "enabled": True,
+                "angle_deg": spec["default_angle"],
+                "response": spec["default_response"],
+                "blade_type": spec["blade_type"],
+                "drive_type": spec["drive_type"],
+            }
+            for zone, spec in ZONE_UI.items()
+        }
+        visual = merge_visual_defaults(
+            {
+                "separation_strength": 0.8,
+                "cavitation_strength": 0.7,
+                "wake_highlight_strength": 1.0,
+                "speed_colormap_strength": 1.0,
+                "vortex_animation_strength": 0.8,
+                "blade_animation_strength": 1.0,
+                "show_separation_zone": True,
+                "show_cavitation_bubbles": True,
+                "show_blade_animation": True,
+                "show_wake_highlight": True,
+                "show_speed_colormap": True,
+                "show_local_vortices": True,
+            }
+        )
+        payload = canvas_payload(
+            velocity=8.0,
+            alpha_deg=4.0,
+            rho=1000.0,
+            cavitation_threshold_kpa=-30.0,
+            particle_count=visual.get("particle_count", 850),
+            animation_speed=visual.get("animation_speed", 1.0),
+            grid_density="medium",
+            zones=zones,
+            show_pressure=visual.get("show_pressure", True),
+            show_particles=visual.get("show_particles", True),
+            show_vortex=visual.get("show_vortex", visual.get("show_local_vortices", True)),
+            show_vanes=visual.get("show_vanes", visual.get("show_blade_animation", True)),
+            playing=visual.get("playing", True),
+            show_zone_labels=visual.get("show_zone_labels", True),
+            trail_length=visual.get("trail_length", 20),
+            emission_strength=visual.get("emission_strength", 0.7),
+            attachment_strength=visual.get("attachment_strength", 0.78),
+            wake_strength=visual.get("wake_strength", visual.get("wake_highlight_strength", 1.0)),
+            vortex_strength=visual.get("vortex_strength", visual.get("vortex_animation_strength", 0.8)),
+            separation_strength=visual.get("separation_strength", 0.8),
+            cavitation_strength=visual.get("cavitation_strength", 0.7),
+            vane_deploy_angle=visual.get("vane_deploy_angle", 24.0),
+            quality_mode=visual.get("quality_mode", "high_quality"),
+            show_cavitation_bubbles=visual.get("show_cavitation_bubbles", True),
+            show_separation=visual.get("show_separation", visual.get("show_separation_zone", True)),
+            show_separation_zone=visual.get("show_separation_zone", True),
+            show_cavitation=visual.get("show_cavitation_bubbles", True),
+            show_wake_highlight=visual.get("show_wake_highlight", True),
+            wake_highlight_strength=visual.get("wake_highlight_strength", 1.0),
+            show_speed_colormap=visual.get("show_speed_colormap", True),
+            speed_colormap_strength=visual.get("speed_colormap_strength", 1.0),
+            show_local_vortices=visual.get("show_local_vortices", True),
+            vortex_animation_strength=visual.get("vortex_animation_strength", 0.8),
+            show_blade_animation=visual.get("show_blade_animation", True),
+            blade_animation_strength=visual.get("blade_animation_strength", 1.0),
+        )
+
+        required_keys = [
+            "showSeparation",
+            "showSeparationZone",
+            "separationStrength",
+            "showCavitationBubbles",
+            "cavitationStrength",
+            "showWakeHighlight",
+            "wakeHighlightStrength",
+            "showSpeedColormap",
+            "speedColormapStrength",
+            "showLocalVortices",
+            "vortexAnimationStrength",
+            "showBladeAnimation",
+            "bladeAnimationStrength",
+        ]
+        missing = [key for key in required_keys if key not in payload]
+        if missing:
+            raise RuntimeError(f"canvas payload missing keys: {', '.join(missing)}")
+        report.append("- OK canvas payload accepts advanced visual parameters")
+        report.append("")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        report.append(f"- ERROR canvas payload visual parameter check failed: {exc}")
+        report.append("")
+        return False
+
+
 def check_core_smoke(report: list[str]) -> bool:
     report.append("## Core Simulation And Export")
     try:
@@ -299,6 +396,7 @@ def main() -> int:
         check_forbidden_content,
         check_py_compile,
         check_installed_dependencies,
+        check_canvas_payload_visual_params,
         check_core_smoke,
     ]
     results = [check(report) for check in checks]
